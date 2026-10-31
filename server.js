@@ -550,8 +550,11 @@ app.get('/', (req, res) => {
             <span style="background: #581c87; color: #e9d5ff; font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 9999px; font-weight: 700;">DUPLICATE SHIELD</span>
           </div>
           <p style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.75rem;">
-            Paste numbers from past bots or outreach campaigns below. They will be added to the permanent ledger so no device will ever contact them again!
+            WhatsApp history automatically shields all past conversations from your phone. You can also trigger an instant resync or paste custom numbers below:
           </p>
+          <form method="POST" action="/api/whatsapp/sync-now" style="margin-bottom: 0.75rem;">
+            <button type="submit" class="btn" style="background: #2563eb; color: #fff; font-weight: 700; cursor: pointer; width: 100%;">🔄 Re-Sync All Past Chats From Connected Phone</button>
+          </form>
           <form method="POST" action="/api/leads/shield-past">
             <textarea name="pastNumbers" placeholder="Paste numbers here (one per line)..."></textarea>
             <button type="submit" class="btn" style="background: #7c3aed; color: #fff; font-weight: 700; cursor: pointer;">🛡️ Permanently Shield These Numbers</button>
@@ -757,7 +760,20 @@ app.post('/api/leads/shield-past', (req, res) => {
   }
 
   const result = scraper.recordBulkSentPhones(numbersToShield);
+  try {
+    const shieldSet = new Set(numbersToShield.map(n => String(n).replace(/\D/g, '')));
+    scraper.syncExistingChatsToDatabase(shieldSet);
+  } catch (e) {}
   res.redirect(`/?shielded=true&count=${result.added}`);
+});
+
+app.post('/api/whatsapp/sync-now', (req, res) => {
+  const syncedSet = typeof whatsapp.getExistingChatsSet === 'function' ? whatsapp.getExistingChatsSet() : new Set();
+  let updated = 0;
+  if (syncedSet && syncedSet.size > 0) {
+    updated = scraper.syncExistingChatsToDatabase(syncedSet);
+  }
+  res.redirect(`/?synced=true&updated=${updated}&totalShielded=${syncedSet.size}`);
 });
 
 app.post('/api/queue/pause', (req, res) => {

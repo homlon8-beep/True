@@ -397,6 +397,7 @@ async function runDeviceWorker(deviceId) {
 
     // 7. Strict Multi-Layer Past Conversation & Sent Shield
     const hasPastInteraction = whatsapp.hasExistingChat(lead.phone) || 
+                               whatsapp.hasExistingChat(lead.jid) ||
                                scraper.isPhoneAlreadySent(lead.phone) || 
                                chatMemory.hasConversation(lead.phone);
 
@@ -431,8 +432,8 @@ async function runDeviceWorker(deviceId) {
 
     lead.jid = waCheck.jid || formatted.jid;
 
-    // Double-check verified WhatsApp JID against existing chats
-    if (whatsapp.hasExistingChat(lead.jid)) {
+    // Double-check verified WhatsApp JID and LID against existing chats
+    if (whatsapp.hasExistingChat(lead.jid) || whatsapp.hasExistingChat(lead.phone) || (waCheck.lid && whatsapp.hasExistingChat(waCheck.lid))) {
       console.log(`⏩ [Past Conversation Shield Device ${deviceId}] Verified WhatsApp account ${lead.jid} (+${lead.phone}) has existing chat. Skipping!`);
       scraper.updateLeadStatus(lead.phone, 'already_contacted', 'Prior chat history found on WhatsApp', deviceId);
       continue;

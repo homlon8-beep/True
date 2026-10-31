@@ -7408,8 +7408,8 @@
       "query": "",
       "assignedAccount": "device_1",
       "discoveredAt": "2026-10-31T00:02:04.191Z",
-      "status": "queued",
-      "lastSentAt": null
+      "status": "sent",
+      "lastSentAt": "2026-10-31T16:36:29.510Z"
     },
     {
       "phone": "14938212681",
@@ -8233,8 +8233,8 @@
       "query": "",
       "assignedAccount": "device_1",
       "discoveredAt": "2026-10-31T00:03:52.528Z",
-      "status": "queued",
-      "lastSentAt": null
+      "status": "sent",
+      "lastSentAt": "2026-10-31T16:36:29.528Z"
     },
     {
       "phone": "17087822020",
@@ -16378,8 +16378,8 @@
       "query": "",
       "assignedAccount": "device_1",
       "discoveredAt": "2026-10-31T00:35:59.279Z",
-      "status": "queued",
-      "lastSentAt": null
+      "status": "sent",
+      "lastSentAt": "2026-10-31T16:36:29.529Z"
     },
     {
       "phone": "19297778811",

@@ -95,7 +95,40 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const devices = new Map();
 
 // Shield Set for all past chats synced directly from WhatsApp across all devices
+const SYNCED_CHATS_FILE = path.join(__dirname, 'whatsapp_synced_chats.json');
 const existingChatsSet = new Set();
+
+function loadSyncedChatsFromDisk() {
+  try {
+    if (fs.existsSync(SYNCED_CHATS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(SYNCED_CHATS_FILE, 'utf8'));
+      if (Array.isArray(data)) {
+        for (const item of data) {
+          const clean = String(item).split('@')[0].replace(/\D/g, '');
+          if (clean && clean.length >= 7) {
+            existingChatsSet.add(clean);
+            if (clean.length === 11 && clean.startsWith('1')) existingChatsSet.add(clean.slice(1));
+            else if (clean.length === 10) existingChatsSet.add('1' + clean);
+            else if (clean.length === 12 && clean.startsWith('91')) existingChatsSet.add(clean.slice(2));
+          }
+        }
+        console.log(`🛡️ [Boot Shield] Loaded ${existingChatsSet.size} past shielded contacts from whatsapp_synced_chats.json.`);
+      }
+    }
+  } catch (e) {}
+}
+loadSyncedChatsFromDisk();
+
+let saveSyncedTimeout = null;
+function scheduleSaveSyncedChats() {
+  if (saveSyncedTimeout) return;
+  saveSyncedTimeout = setTimeout(() => {
+    saveSyncedTimeout = null;
+    try {
+      fs.writeFileSync(SYNCED_CHATS_FILE, JSON.stringify([...existingChatsSet], null, 2), 'utf8');
+    } catch (e) {}
+  }, 2500);
+}
 
 function registerExistingChat(jid) {
   if (!jid) return;
@@ -105,9 +138,13 @@ function registerExistingChat(jid) {
     scraper.recordSentPhone(cleanDigits);
     if (cleanDigits.length === 11 && cleanDigits.startsWith('1')) {
       existingChatsSet.add(cleanDigits.slice(1));
+    } else if (cleanDigits.length === 10) {
+      existingChatsSet.add('1' + cleanDigits);
+      existingChatsSet.add('91' + cleanDigits);
     } else if (cleanDigits.length === 12 && cleanDigits.startsWith('91')) {
       existingChatsSet.add(cleanDigits.slice(2));
     }
+    scheduleSaveSyncedChats();
   }
 }
 
@@ -196,12 +233,12 @@ async function initDevice(deviceId, onReadyCallback) {
     },
     logger: pino({ level: 'silent' }),
     printQRInTerminal: false,
-    browser: Browsers.windows('Chrome'),
+    browser: Browsers.macOS('Desktop'),
     keepAliveIntervalMs: 25000,
     connectTimeoutMs: 60000,
     defaultQueryTimeoutMs: 60000,
-    syncFullHistory: false,
-    shouldSyncHistoryMessage: () => false,
+    syncFullHistory: true,
+    shouldSyncHistoryMessage: () => true,
     markOnlineOnConnect: true,
     retryRequestDelayMs: 350,
     generateHighQualityLinkPreview: false,
@@ -291,13 +328,19 @@ async function initDevice(deviceId, onReadyCallback) {
   });
 
   // Comprehensive WhatsApp History Sync & Past Contact Shield
-  sock.ev.on('messaging-history.set', ({ chats, contacts, messages }) => {
+  sock.ev.on('messaging-history.set', ({ chats, contacts, messages, isLatest, syncType }) => {
     session.isHistorySynced = true;
+    let newSyncCount = 0;
     if (Array.isArray(chats)) {
-      for (const c of chats) if (c?.id) registerExistingChat(c.id);
+      for (const c of chats) {
+        if (c?.id) { registerExistingChat(c.id); newSyncCount++; }
+      }
     }
     if (Array.isArray(contacts)) {
-      for (const co of contacts) if (co?.id) registerExistingChat(co.id);
+      for (const co of contacts) {
+        if (co?.id) { registerExistingChat(co.id); newSyncCount++; }
+        if (co?.lid) { registerExistingChat(co.lid); }
+      }
     }
     if (Array.isArray(messages)) {
       for (const m of messages) {
@@ -305,6 +348,7 @@ async function initDevice(deviceId, onReadyCallback) {
         const jid = m.key.remoteJid;
         if (jid && !jid.endsWith('@g.us') && !jid.endsWith('@broadcast') && jid !== 'status@broadcast') {
           registerExistingChat(jid);
+          newSyncCount++;
           // Restore conversation thread directly into chat memory
           const cleanPhone = jid.replace(/@.*$/, '').replace(/\D/g, '');
           const text = extractMessageText(m).trim();
@@ -318,7 +362,20 @@ async function initDevice(deviceId, onReadyCallback) {
         }
       }
     }
-    console.log(`🛡️ [WhatsApp History Synced Device ${id}] Synced & shielded ${existingChatsSet.size} past chats/contacts from WhatsApp.`);
+
+    // Automatically shield and mark any matching leads in DB as 'already_contacted'
+    try {
+      if (typeof scraper.syncExistingChatsToDatabase === 'function') {
+        scraper.syncExistingChatsToDatabase(existingChatsSet);
+      }
+    } catch (e) {}
+
+    console.log(`🛡️ [WhatsApp History Synced Device ${id}] Unpacked ${newSyncCount} items. Active shield contains ${existingChatsSet.size} total contacts/chats from WhatsApp.`);
+  });
+
+  sock.ev.on('chats.phoneNumberShare', ({ lid, jid }) => {
+    if (jid) registerExistingChat(jid);
+    if (lid) registerExistingChat(lid);
   });
 
   sock.ev.on('chats.set', ({ chats }) => {
@@ -341,13 +398,19 @@ async function initDevice(deviceId, onReadyCallback) {
 
   sock.ev.on('contacts.set', ({ contacts }) => {
     if (Array.isArray(contacts)) {
-      for (const co of contacts) if (co?.id) registerExistingChat(co.id);
+      for (const co of contacts) {
+        if (co?.id) registerExistingChat(co.id);
+        if (co?.lid) registerExistingChat(co.lid);
+      }
     }
   });
 
   sock.ev.on('contacts.upsert', (contacts) => {
     if (Array.isArray(contacts)) {
-      for (const co of contacts) if (co?.id) registerExistingChat(co.id);
+      for (const co of contacts) {
+        if (co?.id) registerExistingChat(co.id);
+        if (co?.lid) registerExistingChat(co.lid);
+      }
     }
   });
 
@@ -781,6 +844,10 @@ function getConnectedDevices() {
   return list;
 }
 
+function getExistingChatsSet() {
+  return existingChatsSet;
+}
+
 function isDeviceConnected(deviceId) {
   const s = devices.get(parseInt(deviceId, 10));
   return s ? s.isConnected : false;
@@ -789,9 +856,9 @@ function isDeviceConnected(deviceId) {
 function isDeviceReadyForOutreach(deviceId) {
   const s = devices.get(parseInt(deviceId, 10));
   if (!s || !s.isConnected) return false;
-  // Ready if history sync completed or at least 20 seconds have elapsed since connection
+  // Ready if history sync completed or at least 60 seconds have elapsed since connection
   if (s.isHistorySynced) return true;
-  return s.connectedAt && (Date.now() - s.connectedAt > 20000);
+  return s.connectedAt && (Date.now() - s.connectedAt > 60000);
 }
 
 function getDeviceQr(deviceId) {
@@ -833,6 +900,7 @@ module.exports = {
   sendTextMessage,
   checkNumberOnWhatsApp,
   hasExistingChat,
+  getExistingChatsSet,
   // Backwards compatibility
   initWhatsApp,
   isConnected,

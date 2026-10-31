@@ -445,6 +445,32 @@ function updateLeadStatus(phone, status, error = null, deviceId = null) {
   }
 }
 
+function syncExistingChatsToDatabase(chatsSet) {
+  if (!chatsSet || !(chatsSet instanceof Set) || chatsSet.size === 0) return 0;
+  const db = loadDatabase();
+  let updated = 0;
+  for (const lead of db.leads) {
+    if (lead.status === 'queued') {
+      const clean = String(lead.phone).replace(/\D/g, '');
+      const variations = [clean];
+      if (clean.length === 11 && clean.startsWith('1')) variations.push(clean.slice(1));
+      else if (clean.length === 10) variations.push('1' + clean, '91' + clean);
+      else if (clean.length === 12 && clean.startsWith('91')) variations.push(clean.slice(2));
+
+      if (variations.some(v => chatsSet.has(v))) {
+        lead.status = 'already_contacted';
+        lead.failReason = 'Synced from existing WhatsApp chat history';
+        updated++;
+      }
+    }
+  }
+  if (updated > 0) {
+    saveDatabase(db);
+    console.log(`🛡️ [Database Shield Sync] Automatically shielded and marked ${updated} leads as 'already_contacted' based on your WhatsApp history!`);
+  }
+  return updated;
+}
+
 // Rotating User Agents for web scrapers
 const ROTATING_USER_AGENTS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
@@ -816,6 +842,7 @@ module.exports = {
   getQueuedLeadsCount,
   getHotRepliedLeads,
   updateLeadStatus,
+  syncExistingChatsToDatabase,
   triggerFreeWebScraper,
   triggerApifyLeadDiscovery,
   start247ContinuousScraper,
