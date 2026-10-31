@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: webify-lead-bot
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node --max-old-space-size=384 server.js
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: NODE_ENV
+        value: production
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: APIFY_API_TOKEN
+        sync: false
+      - key: AGENCY_NAME
+        value: Webify
+      - key: MAX_DEVICES
+        value: 6
+      - key: DAILY_MAX_LEADS_PER_DEVICE
+        value: 50
+      - key: MIN_MSG_DELAY_MS
+        value: 60000
+      - key: MAX_MSG_DELAY_MS
+        value: 120000
+      - key: MIN_BREAK_MINS
+        value: 50
+      - key: MAX_BREAK_MINS
+        value: 80
+      - key: MIN_BATCH_SIZE
+        value: 5
+      - key: MAX_BATCH_SIZE
+        value: 8

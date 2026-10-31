@@ -1,0 +1,15 @@
+{
+  "dailyMaxLeadsPerDevice": 50,
+  "minMsgDelayMs": 35000,
+  "maxMsgDelayMs": 70000,
+  "minBreakMins": 5,
+  "maxBreakMins": 10,
+  "minBatchSize": 8,
+  "maxBatchSize": 12,
+  "businessHoursShield": false,
+  "adaptiveVelocityRamp": false,
+  "specialDeviceNumber": "9416085989",
+  "specialDailyLimit": 10,
+  "vaultCode": "3369",
+  "pacingPreset": "fast"
+}

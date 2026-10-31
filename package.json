@@ -1,0 +1,19 @@
+{
+  "name": "whatsapp-lead-bot-webify",
+  "version": "1.0.0",
+  "description": "Webify Multi-Device WhatsApp AI Lead Qualification & Conversion Bot",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "build": "npm install",
+    "start": "node --max-old-space-size=384 server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.19",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "pino": "^9.6.0",
+    "qrcode": "^1.5.4"
+  }
+}
