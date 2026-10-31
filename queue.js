@@ -341,10 +341,16 @@ async function runDeviceWorker(deviceId) {
       continue;
     }
 
-    // 3. Check if this specific device is connected
+    // 3. Check if this specific device is connected & history is fully synced
     if (!whatsapp.isDeviceConnected(deviceId)) {
       state.currentStatus = `Waiting for WhatsApp QR scan on /qr?device=${deviceId}...`;
       await sleep(8000);
+      continue;
+    }
+
+    if (typeof whatsapp.isDeviceReadyForOutreach === 'function' && !whatsapp.isDeviceReadyForOutreach(deviceId)) {
+      state.currentStatus = `Syncing chat history & shielding existing contacts for Device ${deviceId}...`;
+      await sleep(4000);
       continue;
     }
 
@@ -424,6 +430,13 @@ async function runDeviceWorker(deviceId) {
     }
 
     lead.jid = waCheck.jid || formatted.jid;
+
+    // Double-check verified WhatsApp JID against existing chats
+    if (whatsapp.hasExistingChat(lead.jid)) {
+      console.log(`⏩ [Past Conversation Shield Device ${deviceId}] Verified WhatsApp account ${lead.jid} (+${lead.phone}) has existing chat. Skipping!`);
+      scraper.updateLeadStatus(lead.phone, 'already_contacted', 'Prior chat history found on WhatsApp', deviceId);
+      continue;
+    }
 
     // 9. Generate Two-Step Undetectable Outreach Message
     state.currentStatus = `Preparing personalized outreach for +${lead.phone}...`;

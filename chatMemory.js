@@ -205,8 +205,21 @@ function getAllConversations() {
 function hasConversation(rawPhone) {
   if (!rawPhone) return false;
   const cleanPhone = String(rawPhone).replace(/\D/g, '');
-  const conv = memoryStore.get(cleanPhone);
-  return Boolean(conv && Array.isArray(conv.messages) && conv.messages.length > 0);
+  if (!cleanPhone) return false;
+
+  const variations = [cleanPhone];
+  if (cleanPhone.length === 11 && cleanPhone.startsWith('1')) {
+    variations.push(cleanPhone.slice(1));
+  } else if (cleanPhone.length === 10) {
+    variations.push('1' + cleanPhone, '91' + cleanPhone);
+  } else if (cleanPhone.length === 12 && cleanPhone.startsWith('91')) {
+    variations.push(cleanPhone.slice(2));
+  }
+
+  return variations.some(v => {
+    const conv = memoryStore.get(v);
+    return Boolean(conv && Array.isArray(conv.messages) && conv.messages.length > 0);
+  });
 }
 
 module.exports = {

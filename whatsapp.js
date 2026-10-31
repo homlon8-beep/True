@@ -103,6 +103,11 @@ function registerExistingChat(jid) {
   if (cleanDigits && cleanDigits.length >= 7) {
     existingChatsSet.add(cleanDigits);
     scraper.recordSentPhone(cleanDigits);
+    if (cleanDigits.length === 11 && cleanDigits.startsWith('1')) {
+      existingChatsSet.add(cleanDigits.slice(1));
+    } else if (cleanDigits.length === 12 && cleanDigits.startsWith('91')) {
+      existingChatsSet.add(cleanDigits.slice(2));
+    }
   }
 }
 
@@ -110,7 +115,17 @@ function hasExistingChat(phoneOrJid) {
   if (!phoneOrJid) return false;
   const cleanDigits = String(phoneOrJid).split('@')[0].replace(/\D/g, '');
   if (!cleanDigits) return false;
-  return existingChatsSet.has(cleanDigits) || scraper.isPhoneAlreadySent(cleanDigits) || chatMemory.hasConversation(cleanDigits);
+
+  const variations = [cleanDigits];
+  if (cleanDigits.length === 11 && cleanDigits.startsWith('1')) {
+    variations.push(cleanDigits.slice(1));
+  } else if (cleanDigits.length === 10) {
+    variations.push('1' + cleanDigits, '91' + cleanDigits);
+  } else if (cleanDigits.length === 12 && cleanDigits.startsWith('91')) {
+    variations.push(cleanDigits.slice(2));
+  }
+
+  return variations.some(v => existingChatsSet.has(v) || scraper.isPhoneAlreadySent(v) || chatMemory.hasConversation(v));
 }
 
 // Helper to extract text from all nested WhatsApp message types
@@ -265,6 +280,8 @@ async function initDevice(deviceId, onReadyCallback) {
       }
     } else if (connection === 'open') {
       session.isConnected = true;
+      session.connectedAt = Date.now();
+      session.isHistorySynced = false;
       session.qrDataUrl = null;
       session.isReconnecting = false;
       session.phone = sock.user?.id ? sock.user.id.split(':')[0] : 'Connected';
@@ -275,6 +292,7 @@ async function initDevice(deviceId, onReadyCallback) {
 
   // Comprehensive WhatsApp History Sync & Past Contact Shield
   sock.ev.on('messaging-history.set', ({ chats, contacts, messages }) => {
+    session.isHistorySynced = true;
     if (Array.isArray(chats)) {
       for (const c of chats) if (c?.id) registerExistingChat(c.id);
     }
@@ -768,6 +786,14 @@ function isDeviceConnected(deviceId) {
   return s ? s.isConnected : false;
 }
 
+function isDeviceReadyForOutreach(deviceId) {
+  const s = devices.get(parseInt(deviceId, 10));
+  if (!s || !s.isConnected) return false;
+  // Ready if history sync completed or at least 20 seconds have elapsed since connection
+  if (s.isHistorySynced) return true;
+  return s.connectedAt && (Date.now() - s.connectedAt > 20000);
+}
+
 function getDeviceQr(deviceId) {
   const s = devices.get(parseInt(deviceId, 10));
   return s ? s.qrDataUrl : null;
@@ -802,6 +828,7 @@ module.exports = {
   getAllDevices,
   getConnectedDevices,
   isDeviceConnected,
+  isDeviceReadyForOutreach,
   getDeviceQr,
   sendTextMessage,
   checkNumberOnWhatsApp,

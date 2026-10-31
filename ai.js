@@ -10,25 +10,37 @@
  * - STRICT RULE: NO PHONE CALLS. Everything is handled directly inside this WhatsApp chat.
  */
 
+require('dotenv').config();
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const AGENCY_NAME = process.env.AGENCY_NAME || 'Webify';
 
-const SYSTEM_PROMPT = `You are LO, a 24-year-old tech entrepreneur and founder of Webify, texting casually on WhatsApp from your phone.
+const SYSTEM_PROMPT = `You are Shaurya from Webify, texting casually on WhatsApp from your phone.
+
+IDENTITY & NAME RULE:
+- Your name is Shaurya. If asked who you are or when introducing yourself, always say "I'm Shaurya from Webify".
+- NEVER use "LO" or any other name.
 
 WHO WE ARE & WHAT WE BUILD:
 - We build custom 24/7 Autonomous WhatsApp Lead Finder Bots for contractors and local businesses.
   Basically the software pulls 300 to 600 verified homeowner phone numbers every single day from Google Maps, Instagram, and local directories, and starts warm customer chats on autopilot.
-- We also build modern, high-converting websites and landing pages ($299 to $599) designed to turn traffic into paying clients.
+- We also build modern, high-converting websites and landing pages designed to turn traffic into paying clients.
 - We do NOT do phone calls. Everything is handled directly inside WhatsApp chat.
+
+CRITICAL PRICING & QUOTE RULE:
+- NEVER QUOTE PRICES OR DOLLAR/RUPEE NUMBERS YOURSELF.
+- If the lead asks about price, cost, rates, packages, or how much it costs (e.g. "how much?", "price?", "cost?", "pricing?", "rates?", "kitna charge hai?", "kitna paisa?"):
+  You MUST tell them:
+  "Our owner will assist you directly in this chat in under 20 minutes with exact custom pricing and packages! In the meantime, what kind of monthly volume or setup are you looking for?"
+  For Hindi/Hinglish:
+  "Humare owner aapko isi chat me agle 20 minute ke andar pricing aur packages ke baare me personally assist karenge! Tab tak aap bataye normally aapko kaisa setup ya daily kitni leads chahiye?"
 
 CRITICAL CONVERSATIONAL MEMORY & TONE RULES:
 1. TALK LIKE A REAL HUMAN texting a friend or fellow business owner on WhatsApp. Short, direct, conversational (1 to 3 short sentences).
 2. REMEMBER THE CONVERSATION HISTORY:
-   - NEVER re-introduce yourself or repeat "I'm LO from Webify" if you already introduced yourself earlier in the chat history!
+   - NEVER re-introduce yourself or repeat "I'm Shaurya from Webify" if you already introduced yourself earlier in the chat history!
    - NEVER repeat your standard pitch if you already explained what we do.
-   - If they ask for price, state it clearly ($299 to $599 for websites, lead bots depend on volume) and offer 20 free leads in their city.
    - If they say "yes", "sure", "okay", or "send them", DO NOT repeat the pitch! Say you're pulling 20 verified leads right now and ask if they prefer any specific zip code/area or the whole city.
    - If they ask a specific question, answer that exact question directly first.
 3. STRICTLY FORBIDDEN:
@@ -126,7 +138,7 @@ async function callGroq(messages, temperature = 0.6) {
           model: mdl,
           messages: messages,
           temperature: temperature,
-          max_tokens: 300
+          max_tokens: 1024
         }),
         signal: controller.signal
       });
@@ -342,30 +354,32 @@ CRITICAL RULES:
 /**
  * Smart Human Dialogue Fallback Generator (Context-Aware, 0% Robotic Slop)
  */
-function generateSmartHumanFallback(incomingText, profile = {}) {
+function generateSmartHumanFallback(incomingText, profile = {}, history = []) {
   const lower = (incomingText || '').toLowerCase();
   const trade = profile.trade || 'local business';
   const city = profile.city && profile.city !== 'your area' ? profile.city : 'your area';
+  const hasHistory = Array.isArray(history) && history.length > 0;
 
   // Check Hinglish
   const isHinglish = /\b(kya|kaam|bhai|haan|nhi|nahi|batao|karo|kitna|paisa|rupaye|namaste|sahab)\b/i.test(lower);
   if (isHinglish) {
-    if (lower.includes('paisa') || lower.includes('kitna') || lower.includes('cost') || lower.includes('rate')) {
-      return `Bhai websites normally 15,000 se 25,000 ke beech hoti hain, aur automated lead bots custom rate pe depend karte hain kitni daily leads chahiye (upto 600/day). Aapko ek baar 20 sample verified customer leads nikaal ke bhej du free me?`;
+    if (lower.includes('paisa') || lower.includes('kitna') || lower.includes('cost') || lower.includes('rate') || lower.includes('price')) {
+      return `Humare owner aapko isi chat me agle 20 minute ke andar pricing aur packages ke baare me personally assist karenge! Tab tak aap bataye normally aapko kaisa setup ya daily kitni leads chahiye?`;
     }
-    return `Hey bhai! Mai LO, Webify se hu. Hum local businesses ke liye automated WhatsApp lead finder bots aur modern websites banate hain. Basically Google Maps se verified customer numbers nikaal ke WhatsApp pe direct leads connect karta hai bot. Kya aapko aapke area me 20 free sample leads bhej ke dikhau?`;
+    if (hasHistory) {
+      return `Haanji bhai, bilkul! Main aapko 20 free verified sample leads ready karke bhej raha hu. Aapko poore city ki chahiye ya koi specific area ya pincode?`;
+    }
+    return `Hey bhai! Mai Shaurya, Webify se hu. Hum local businesses ke liye automated WhatsApp lead finder bots aur modern websites banate hain. Basically Google Maps se verified customer numbers nikaal ke WhatsApp pe direct leads connect karta hai bot. Kya aapko aapke area me 20 free sample leads bhej ke dikhau?`;
   }
 
   // Pricing inquiry
-  if (/\b(price|cost|how much|pricing|rates|quote|fee|charge)\b/i.test(lower)) {
-    return `Websites are around $299 to $599, and our automated lead bots depend on how many leads/day you want running (up to 600/day).
-
-I can actually run our scraper for ${city} right now and send you 20 free verified homeowner leads right here in chat so you can check the quality yourself. Want me to pull them for you?`;
+  if (/\b(price|cost|how much|pricing|rates|quote|fee|charge|package|packages)\b/i.test(lower)) {
+    return `Our owner will assist you directly in this chat in under 20 minutes with exact custom pricing and packages! In the meantime, what kind of monthly volume or setup are you looking for?`;
   }
 
   // "Who is this?" / "How did you get my number?"
   if (/\b(who is this|who are you|how did you get|who's this|where did you get)\b/i.test(lower)) {
-    return `Hey! I'm LO from Webify. Found your business on Google while looking for solid ${trade} pros in ${city}.
+    return `Hey! I'm Shaurya from Webify. Found your business on Google while looking for solid ${trade} pros in ${city}.
 
 We build custom WhatsApp lead finder bots and modern websites for contractors. Reached out directly to see if you guys could take on an extra 15-20 jobs this month, or if you're already booked out?`;
   }
@@ -377,8 +391,16 @@ We build custom WhatsApp lead finder bots and modern websites for contractors. R
 Most contractors get 10 to 25 warm job inquiries every week without paying for expensive ads. Want me to send a quick 30-second screen recording showing how it works?`;
   }
 
+  // If we already talked to them, do NOT repeat the pitch!
+  if (hasHistory) {
+    if (/\b(yes|yeah|sure|okay|ok|send|interested|show me|go ahead|yep)\b/i.test(lower)) {
+      return `Awesome! Pulling 20 verified leads for ${city} right now. Would you prefer them from a specific zip code or across the entire area?`;
+    }
+    return `Got it! What kind of monthly volume or setup are you looking for? Or want me to pull 20 free sample leads for your area right now so you can check quality?`;
+  }
+
   // General positive confirmation ("Yes we do", "Yeah what do you need", "Available")
-  return `Awesome, thanks for getting back! I actually run Webify—we build custom WhatsApp lead finder bots and high-converting websites for local contractors.
+  return `Awesome, thanks for getting back! I'm Shaurya from Webify—we build custom WhatsApp lead finder bots and high-converting websites for local contractors.
 
 Basically our bots pull 300 to 600 verified homeowner leads a day off Google Maps and start chats on autopilot. Could you guys handle an extra 15-20 ${trade} jobs a month in ${city}, or is your schedule already packed?`;
 }
@@ -449,7 +471,7 @@ async function handleIncomingMessage(senderPhoneOrName, incomingText, history = 
   }
 
   // High-converting, smart, context-aware human fallback (ZERO robotic copypasta)
-  return generateSmartHumanFallback(incomingText, profile);
+  return generateSmartHumanFallback(incomingText, profile, history);
 }
 
 module.exports = {

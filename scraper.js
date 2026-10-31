@@ -29,14 +29,38 @@ function loadSentHistory() {
   return new Set();
 }
 
+function getPhoneVariations(phone) {
+  if (!phone) return [];
+  const digits = String(phone).replace(/\D/g, '');
+  if (!digits) return [];
+  const variations = new Set([digits]);
+  if (digits.length === 11 && digits.startsWith('1')) {
+    variations.add(digits.slice(1));
+  } else if (digits.length === 10) {
+    variations.add('1' + digits);
+    variations.add('91' + digits);
+  } else if (digits.length === 12 && digits.startsWith('91')) {
+    variations.add(digits.slice(2));
+  }
+  return [...variations];
+}
+
 function recordSentPhone(phone) {
   if (!phone) return;
-  const digits = String(phone).replace(/\D/g, '');
   const history = loadSentHistory();
-  history.add(digits);
-  try {
-    fs.writeFileSync(SENT_HISTORY_FILE, JSON.stringify([...history], null, 2), 'utf8');
-  } catch (e) {}
+  const variations = getPhoneVariations(phone);
+  let changed = false;
+  for (const v of variations) {
+    if (!history.has(v)) {
+      history.add(v);
+      changed = true;
+    }
+  }
+  if (changed) {
+    try {
+      fs.writeFileSync(SENT_HISTORY_FILE, JSON.stringify([...history], null, 2), 'utf8');
+    } catch (e) {}
+  }
 }
 
 function recordBulkSentPhones(phoneList) {
@@ -44,10 +68,12 @@ function recordBulkSentPhones(phoneList) {
   const history = loadSentHistory();
   let added = 0;
   for (const p of phoneList) {
-    const digits = String(p).replace(/\D/g, '');
-    if (digits && digits.length >= 7 && !history.has(digits)) {
-      history.add(digits);
-      added++;
+    const variations = getPhoneVariations(p);
+    for (const v of variations) {
+      if (v.length >= 7 && !history.has(v)) {
+        history.add(v);
+        added++;
+      }
     }
   }
   if (added > 0) {
@@ -67,9 +93,9 @@ function getTotalShieldedCount() {
 
 function isPhoneAlreadySent(phone) {
   if (!phone) return false;
-  const digits = String(phone).replace(/\D/g, '');
   const history = loadSentHistory();
-  return history.has(digits);
+  const variations = getPhoneVariations(phone);
+  return variations.some(v => history.has(v));
 }
 
 function loadDatabase() {
