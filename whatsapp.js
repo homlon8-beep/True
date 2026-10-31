@@ -108,8 +108,9 @@ function registerExistingChat(jid) {
 
 function hasExistingChat(phoneOrJid) {
   if (!phoneOrJid) return false;
-  const cleanDigits = String(phoneOrJid).replace(/\D/g, '');
-  return existingChatsSet.has(cleanDigits) || scraper.isPhoneAlreadySent(cleanDigits);
+  const cleanDigits = String(phoneOrJid).split('@')[0].replace(/\D/g, '');
+  if (!cleanDigits) return false;
+  return existingChatsSet.has(cleanDigits) || scraper.isPhoneAlreadySent(cleanDigits) || chatMemory.hasConversation(cleanDigits);
 }
 
 // Helper to extract text from all nested WhatsApp message types
@@ -272,22 +273,71 @@ async function initDevice(deviceId, onReadyCallback) {
     }
   });
 
-  // History sync
-  sock.ev.on('messaging-history.set', ({ chats }) => {
+  // Comprehensive WhatsApp History Sync & Past Contact Shield
+  sock.ev.on('messaging-history.set', ({ chats, contacts, messages }) => {
     if (Array.isArray(chats)) {
-      for (const c of chats) registerExistingChat(c.id);
+      for (const c of chats) if (c?.id) registerExistingChat(c.id);
     }
+    if (Array.isArray(contacts)) {
+      for (const co of contacts) if (co?.id) registerExistingChat(co.id);
+    }
+    if (Array.isArray(messages)) {
+      for (const m of messages) {
+        if (!m || !m.key) continue;
+        const jid = m.key.remoteJid;
+        if (jid && !jid.endsWith('@g.us') && !jid.endsWith('@broadcast') && jid !== 'status@broadcast') {
+          registerExistingChat(jid);
+          // Restore conversation thread directly into chat memory
+          const cleanPhone = jid.replace(/@.*$/, '').replace(/\D/g, '');
+          const text = extractMessageText(m).trim();
+          if (cleanPhone && text) {
+            if (m.key.fromMe) {
+              chatMemory.recordReply(cleanPhone, text);
+            } else {
+              chatMemory.recordIncoming(cleanPhone, text);
+            }
+          }
+        }
+      }
+    }
+    console.log(`🛡️ [WhatsApp History Synced Device ${id}] Synced & shielded ${existingChatsSet.size} past chats/contacts from WhatsApp.`);
   });
 
   sock.ev.on('chats.set', ({ chats }) => {
     if (Array.isArray(chats)) {
-      for (const c of chats) registerExistingChat(c.id);
+      for (const c of chats) if (c?.id) registerExistingChat(c.id);
     }
   });
 
   sock.ev.on('chats.upsert', (chats) => {
     if (Array.isArray(chats)) {
-      for (const c of chats) registerExistingChat(c.id);
+      for (const c of chats) if (c?.id) registerExistingChat(c.id);
+    }
+  });
+
+  sock.ev.on('chats.update', (chats) => {
+    if (Array.isArray(chats)) {
+      for (const c of chats) if (c?.id) registerExistingChat(c.id);
+    }
+  });
+
+  sock.ev.on('contacts.set', ({ contacts }) => {
+    if (Array.isArray(contacts)) {
+      for (const co of contacts) if (co?.id) registerExistingChat(co.id);
+    }
+  });
+
+  sock.ev.on('contacts.upsert', (contacts) => {
+    if (Array.isArray(contacts)) {
+      for (const co of contacts) if (co?.id) registerExistingChat(co.id);
+    }
+  });
+
+  sock.ev.on('messages.set', ({ messages }) => {
+    if (Array.isArray(messages)) {
+      for (const m of messages) {
+        if (m?.key?.remoteJid) registerExistingChat(m.key.remoteJid);
+      }
     }
   });
 
@@ -309,14 +359,21 @@ async function initDevice(deviceId, onReadyCallback) {
         const senderJid = msg.key.remoteJid;
         if (!senderJid) continue;
 
+        // Shield any sender from ever receiving outreach
+        registerExistingChat(senderJid);
+
         const cleanPhone = senderJid.replace(/@.*$/, '').replace(/\D/g, '');
 
-        // Manual override from phone cancels pending AI reply
+        // Manual message sent from phone by user
         if (msg.key.fromMe) {
           if (session.pendingReplies.has(cleanPhone)) {
             clearTimeout(session.pendingReplies.get(cleanPhone).timeout);
             session.pendingReplies.delete(cleanPhone);
             console.log(`✋ [Manual Override Device ${id}] You messaged ${cleanPhone} from your phone. Canceled pending AI auto-reply.`);
+          }
+          const fromMeText = extractMessageText(msg).trim();
+          if (fromMeText && cleanPhone) {
+            chatMemory.recordReply(cleanPhone, fromMeText);
           }
           continue;
         }

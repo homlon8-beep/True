@@ -23,19 +23,22 @@ WHO WE ARE & WHAT WE BUILD:
 - We also build modern, high-converting websites and landing pages ($299 to $599) designed to turn traffic into paying clients.
 - We do NOT do phone calls. Everything is handled directly inside WhatsApp chat.
 
-CRITICAL TONE RULES:
-1. Talk like a REAL HUMAN texting a friend or fellow business owner on WhatsApp.
-2. STRICTLY FORBIDDEN:
+CRITICAL CONVERSATIONAL MEMORY & TONE RULES:
+1. TALK LIKE A REAL HUMAN texting a friend or fellow business owner on WhatsApp. Short, direct, conversational (1 to 3 short sentences).
+2. REMEMBER THE CONVERSATION HISTORY:
+   - NEVER re-introduce yourself or repeat "I'm LO from Webify" if you already introduced yourself earlier in the chat history!
+   - NEVER repeat your standard pitch if you already explained what we do.
+   - If they ask for price, state it clearly ($299 to $599 for websites, lead bots depend on volume) and offer 20 free leads in their city.
+   - If they say "yes", "sure", "okay", or "send them", DO NOT repeat the pitch! Say you're pulling 20 verified leads right now and ask if they prefer any specific zip code/area or the whole city.
+   - If they ask a specific question, answer that exact question directly first.
+3. STRICTLY FORBIDDEN:
    - NEVER use bullet points (•, -, *) or numbered lists (1., 2.).
    - NEVER use rocket emojis (🚀), fire emojis, or cheesy sales emojis.
    - NEVER use markdown bold (**word**) or italics (*word*).
-   - NEVER use robotic phrases: "I hope this finds you well", "As an AI", "In today's digital landscape", "Leverage synergies", "Dear business owner".
-3. Length: Keep replies to 2 to 4 short, casual, natural sentences. Real founders text fast with their thumbs.
-4. Language:
+   - NEVER sound like a customer support bot or AI assistant.
+4. LANGUAGE:
    - Natural conversational English for US/UK/CA/AU.
-   - If the lead texts in Hindi or Hinglish, reply in warm, modern, natural conversational Hinglish ("Haan bhai, Webify se hu...").
-5. Always acknowledge what the person said first before talking about our bots or websites.
-6. The Offer: Always offer to run our scraper right now and send 20 free verified homeowner leads in their city right here in chat so they can see the quality.`;
+   - If the lead texts in Hindi or Hinglish, reply in warm, modern, natural conversational Hinglish ("Haan bhai, Webify se hu...").`;
 
 /**
  * Call Free High-Speed Neural LLM (Pollinations OpenAI Endpoint)
@@ -105,37 +108,45 @@ async function callGemini(messages, temperature = 0.6) {
  */
 async function callGroq(messages, temperature = 0.6) {
   if (!GROQ_API_KEY || !GROQ_API_KEY.startsWith('gsk_')) return null;
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
+  const modelsToTry = [GROQ_MODEL, 'openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'openai/gpt-oss-20b'];
 
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${GROQ_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        messages: messages,
-        temperature: temperature,
-        max_tokens: 300
-      }),
-      signal: controller.signal
-    });
+  for (const mdl of modelsToTry) {
+    if (!mdl) continue;
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 7000);
 
-    clearTimeout(timeout);
-    if (!response.ok) return null;
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${GROQ_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: mdl,
+          messages: messages,
+          temperature: temperature,
+          max_tokens: 300
+        }),
+        signal: controller.signal
+      });
 
-    const data = await response.json();
-    let content = data.choices?.[0]?.message?.content?.trim() || '';
-    if (!content && data.choices?.[0]?.message?.reasoning) {
-      content = data.choices[0].message.reasoning.trim();
+      clearTimeout(timeout);
+      if (!response.ok) continue;
+
+      const data = await response.json();
+      let content = data.choices?.[0]?.message?.content?.trim() || '';
+      if (!content && data.choices?.[0]?.message?.reasoning) {
+        content = data.choices[0].message.reasoning.trim();
+      }
+      if (content && content.length > 5) {
+        return content;
+      }
+    } catch (err) {
+      continue;
     }
-    return content;
-  } catch (err) {
-    return null;
   }
+  return null;
 }
 
 /**
@@ -407,10 +418,18 @@ async function handleIncomingMessage(senderPhoneOrName, incomingText, history = 
 - Always offer to send 20 free verified sample leads directly right here in chat.`
   });
 
-  // Append up to 10 past messages
+  // Append up to 14 past messages (deduplicating trailing message if already recorded)
   if (Array.isArray(history) && history.length > 0) {
-    history.slice(-10).forEach(h => {
-      messages.push({ role: h.role, content: h.content });
+    const past = [...history];
+    const lastMsg = past[past.length - 1];
+    if (lastMsg && lastMsg.role === 'user' && lastMsg.content === incomingText) {
+      past.pop();
+    }
+    past.slice(-14).forEach(h => {
+      messages.push({
+        role: h.role === 'assistant' ? 'assistant' : 'user',
+        content: h.content
+      });
     });
   }
 

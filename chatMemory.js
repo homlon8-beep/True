@@ -202,6 +202,13 @@ function getAllConversations() {
   return list.sort((a, b) => (b.profile?.lastActive || 0) - (a.profile?.lastActive || 0));
 }
 
+function hasConversation(rawPhone) {
+  if (!rawPhone) return false;
+  const cleanPhone = String(rawPhone).replace(/\D/g, '');
+  const conv = memoryStore.get(cleanPhone);
+  return Boolean(conv && Array.isArray(conv.messages) && conv.messages.length > 0);
+}
+
 module.exports = {
   recordOutreach,
   recordIncoming,
@@ -209,5 +216,6 @@ module.exports = {
   updateStage,
   getFormattedHistory,
   getProfile,
-  getAllConversations
+  getAllConversations,
+  hasConversation
 };

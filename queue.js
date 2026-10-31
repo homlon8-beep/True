@@ -389,10 +389,14 @@ async function runDeviceWorker(deviceId) {
     lead.jid = formatted.jid;
     lead.phone = formatted.cleanNumber;
 
-    // 7. Duplicate & Sent Shield
-    if (scraper.isPhoneAlreadySent(lead.phone) || whatsapp.hasExistingChat(lead.phone)) {
-      console.log(`⏩ [Device ${deviceId}] ${lead.phone} was already contacted. Skipping!`);
-      scraper.updateLeadStatus(lead.phone, 'sent', null, deviceId);
+    // 7. Strict Multi-Layer Past Conversation & Sent Shield
+    const hasPastInteraction = whatsapp.hasExistingChat(lead.phone) || 
+                               scraper.isPhoneAlreadySent(lead.phone) || 
+                               chatMemory.hasConversation(lead.phone);
+
+    if (hasPastInteraction) {
+      console.log(`⏩ [Past Conversation Shield Device ${deviceId}] +${lead.phone} has prior WhatsApp history or was previously contacted. Skipping!`);
+      scraper.updateLeadStatus(lead.phone, 'already_contacted', 'Prior chat history found on WhatsApp', deviceId);
       continue;
     }
 
