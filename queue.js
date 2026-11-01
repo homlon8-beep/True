@@ -90,20 +90,20 @@ function setDailyMaxLeadsPerDevice(count, preset = 'custom') {
 
   // Adjust pacing intelligently if presets are chosen
   if (preset === 'turbo') {
-    updates.minMsgDelayMs = 25000;
-    updates.maxMsgDelayMs = 45000;
-    updates.minBreakMins = 3;
-    updates.maxBreakMins = 6;
-    updates.minBatchSize = 10;
-    updates.maxBatchSize = 15;
+    updates.minMsgDelayMs = 20000;
+    updates.maxMsgDelayMs = 35000;
+    updates.minBreakMins = 1;
+    updates.maxBreakMins = 2;
+    updates.minBatchSize = 15;
+    updates.maxBatchSize = 25;
     updates.businessHoursShield = false;
   } else if (preset === 'fast' || preset === 'high_growth') {
-    updates.minMsgDelayMs = 35000;
-    updates.maxMsgDelayMs = 70000;
-    updates.minBreakMins = 5;
-    updates.maxBreakMins = 10;
-    updates.minBatchSize = 8;
-    updates.maxBatchSize = 12;
+    updates.minMsgDelayMs = 30000;
+    updates.maxMsgDelayMs = 45000;
+    updates.minBreakMins = 1.5;
+    updates.maxBreakMins = 3;
+    updates.minBatchSize = 12;
+    updates.maxBatchSize = 18;
     updates.businessHoursShield = false;
   } else if (preset === 'balanced') {
     updates.minMsgDelayMs = 60000;

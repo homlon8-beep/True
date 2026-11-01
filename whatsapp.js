@@ -723,8 +723,12 @@ async function sendTextMessage(deviceId, jid, text, metadata = {}) {
     await session.sock.sendPresenceUpdate('paused', jid);
     await sleep(1200 + Math.random() * 1500);
 
-    // 4. Send message
-    const sentMsg = await session.sock.sendMessage(jid, { text });
+    // 4. Send message with strict 15s network timeout
+    const sendPromise = session.sock.sendMessage(jid, { text });
+    const sendTimeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Socket sendMessage timed out after 15s')), 15000)
+    );
+    const sentMsg = await Promise.race([sendPromise, sendTimeout]);
     if (sentMsg?.key?.id && sentMsg?.message) {
       storeMessage(sentMsg.key.id, sentMsg.message);
     }
@@ -827,7 +831,11 @@ async function checkNumberOnWhatsApp(deviceId, phoneOrJid) {
       const formatted = scraper.formatWhatsAppJid(phoneOrJid);
       checkJid = formatted ? formatted.jid : `${String(phoneOrJid).replace(/\D/g, '')}@s.whatsapp.net`;
     }
-    const [result] = await targetSession.sock.onWhatsApp(checkJid);
+    const checkPromise = targetSession.sock.onWhatsApp(checkJid);
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('WhatsApp verification query timed out after 8s')), 8000)
+    );
+    const [result] = await Promise.race([checkPromise, timeoutPromise]);
 
     if (result && result.exists) {
       if (result.lid && result.jid) {
