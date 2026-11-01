@@ -202,24 +202,30 @@ function getAllConversations() {
   return list.sort((a, b) => (b.profile?.lastActive || 0) - (a.profile?.lastActive || 0));
 }
 
-function hasConversation(rawPhone) {
-  if (!rawPhone) return false;
-  const cleanPhone = String(rawPhone).replace(/\D/g, '');
-  if (!cleanPhone) return false;
+function hasConversation(rawPhone, rawLid = null) {
+  if (!rawPhone && !rawLid) return false;
+  const idsToCheck = [rawPhone, rawLid].filter(Boolean);
+  
+  for (const id of idsToCheck) {
+    const clean = String(id).replace(/\D/g, '');
+    if (!clean) continue;
 
-  const variations = [cleanPhone];
-  if (cleanPhone.length === 11 && cleanPhone.startsWith('1')) {
-    variations.push(cleanPhone.slice(1));
-  } else if (cleanPhone.length === 10) {
-    variations.push('1' + cleanPhone, '91' + cleanPhone);
-  } else if (cleanPhone.length === 12 && cleanPhone.startsWith('91')) {
-    variations.push(cleanPhone.slice(2));
+    const variations = [clean];
+    if (clean.length === 11 && clean.startsWith('1')) {
+      variations.push(clean.slice(1));
+    } else if (clean.length === 10) {
+      variations.push('1' + clean, '91' + clean);
+    } else if (clean.length === 12 && clean.startsWith('91')) {
+      variations.push(clean.slice(2));
+    }
+
+    const found = variations.some(v => {
+      const conv = memoryStore.get(v);
+      return Boolean(conv && Array.isArray(conv.messages) && conv.messages.length > 0);
+    });
+    if (found) return true;
   }
-
-  return variations.some(v => {
-    const conv = memoryStore.get(v);
-    return Boolean(conv && Array.isArray(conv.messages) && conv.messages.length > 0);
-  });
+  return false;
 }
 
 module.exports = {

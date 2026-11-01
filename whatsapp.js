@@ -97,6 +97,26 @@ const devices = new Map();
 // Shield Set for all past chats synced directly from WhatsApp across all devices
 const SYNCED_CHATS_FILE = path.join(__dirname, 'whatsapp_synced_chats.json');
 const existingChatsSet = new Set();
+const lidToPhoneMap = new Map();
+const phoneToLidMap = new Map();
+
+function registerLidPhonePair(lid, phoneOrJid) {
+  if (!lid || !phoneOrJid) return;
+  const cleanLid = String(lid).split('@')[0].replace(/\D/g, '');
+  const cleanPhone = String(phoneOrJid).split('@')[0].replace(/\D/g, '');
+  if (cleanLid && cleanPhone && cleanLid !== cleanPhone) {
+    lidToPhoneMap.set(cleanLid, cleanPhone);
+    phoneToLidMap.set(cleanPhone, cleanLid);
+    if (cleanPhone.length === 11 && cleanPhone.startsWith('1')) {
+      phoneToLidMap.set(cleanPhone.slice(1), cleanLid);
+    } else if (cleanPhone.length === 10) {
+      phoneToLidMap.set('1' + cleanPhone, cleanLid);
+      phoneToLidMap.set('91' + cleanPhone, cleanLid);
+    } else if (cleanPhone.length === 12 && cleanPhone.startsWith('91')) {
+      phoneToLidMap.set(cleanPhone.slice(2), cleanLid);
+    }
+  }
+}
 
 function loadSyncedChatsFromDisk() {
   try {
@@ -160,6 +180,16 @@ function hasExistingChat(phoneOrJid) {
     variations.push('1' + cleanDigits, '91' + cleanDigits);
   } else if (cleanDigits.length === 12 && cleanDigits.startsWith('91')) {
     variations.push(cleanDigits.slice(2));
+  }
+
+  // Also include mapped LID or mapped Phone
+  const mappedLid = phoneToLidMap.get(cleanDigits);
+  if (mappedLid) variations.push(mappedLid);
+  const mappedPhone = lidToPhoneMap.get(cleanDigits);
+  if (mappedPhone) {
+    variations.push(mappedPhone);
+    if (mappedPhone.length === 11 && mappedPhone.startsWith('1')) variations.push(mappedPhone.slice(1));
+    else if (mappedPhone.length === 10) variations.push('1' + mappedPhone, '91' + mappedPhone);
   }
 
   return variations.some(v => existingChatsSet.has(v) || scraper.isPhoneAlreadySent(v) || chatMemory.hasConversation(v));
@@ -340,6 +370,9 @@ async function initDevice(deviceId, onReadyCallback) {
       for (const co of contacts) {
         if (co?.id) { registerExistingChat(co.id); newSyncCount++; }
         if (co?.lid) { registerExistingChat(co.lid); }
+        if (co?.lid && (co?.id || co?.jid)) {
+          registerLidPhonePair(co.lid, co.id || co.jid);
+        }
       }
     }
     if (Array.isArray(messages)) {
@@ -376,6 +409,7 @@ async function initDevice(deviceId, onReadyCallback) {
   sock.ev.on('chats.phoneNumberShare', ({ lid, jid }) => {
     if (jid) registerExistingChat(jid);
     if (lid) registerExistingChat(lid);
+    if (lid && jid) registerLidPhonePair(lid, jid);
   });
 
   sock.ev.on('chats.set', ({ chats }) => {
@@ -401,6 +435,7 @@ async function initDevice(deviceId, onReadyCallback) {
       for (const co of contacts) {
         if (co?.id) registerExistingChat(co.id);
         if (co?.lid) registerExistingChat(co.lid);
+        if (co?.lid && (co?.id || co?.jid)) registerLidPhonePair(co.lid, co.id || co.jid);
       }
     }
   });
@@ -408,6 +443,12 @@ async function initDevice(deviceId, onReadyCallback) {
   sock.ev.on('contacts.upsert', (contacts) => {
     if (Array.isArray(contacts)) {
       for (const co of contacts) {
+        if (co?.id) registerExistingChat(co.id);
+        if (co?.lid) registerExistingChat(co.lid);
+        if (co?.lid && (co?.id || co?.jid)) registerLidPhonePair(co.lid, co.id || co.jid);
+      }
+    }
+  });
         if (co?.id) registerExistingChat(co.id);
         if (co?.lid) registerExistingChat(co.lid);
       }
@@ -794,6 +835,9 @@ async function checkNumberOnWhatsApp(deviceId, phoneOrJid) {
     const [result] = await targetSession.sock.onWhatsApp(checkJid);
 
     if (result && result.exists) {
+      if (result.lid && result.jid) {
+        registerLidPhonePair(result.lid, result.jid);
+      }
       return { exists: true, jid: result.jid, lid: result.lid || null };
     }
     return { exists: false, jid: null, lid: null };

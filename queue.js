@@ -438,8 +438,8 @@ async function runDeviceWorker(deviceId) {
       whatsapp.hasExistingChat(lead.jid) ||
       (waCheck.lid && whatsapp.hasExistingChat(waCheck.lid)) ||
       scraper.isPhoneAlreadySent(lead.phone) ||
-      chatMemory.hasConversation(lead.phone) ||
-      (waCheck.lid && chatMemory.hasConversation(waCheck.lid));
+      (waCheck.lid && scraper.isPhoneAlreadySent(waCheck.lid)) ||
+      chatMemory.hasConversation(lead.phone, waCheck.lid);
 
     if (isAlreadyChatted) {
       console.log(`⏩ [Past Conversation Shield Device ${deviceId}] Verified WhatsApp account ${lead.jid} (+${lead.phone}, LID: ${waCheck.lid}) has existing chat. Skipping!`);
