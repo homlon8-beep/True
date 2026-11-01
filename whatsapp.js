@@ -449,11 +449,6 @@ async function initDevice(deviceId, onReadyCallback) {
       }
     }
   });
-        if (co?.id) registerExistingChat(co.id);
-        if (co?.lid) registerExistingChat(co.lid);
-      }
-    }
-  });
 
   sock.ev.on('messages.set', ({ messages }) => {
     if (Array.isArray(messages)) {
