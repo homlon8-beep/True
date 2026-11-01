@@ -23,9 +23,8 @@ IDENTITY & NAME RULE:
 - NEVER use "LO" or any other name.
 
 WHO WE ARE & WHAT WE BUILD:
-- We build custom 24/7 Autonomous WhatsApp Lead Finder Bots for contractors and local businesses.
-  Basically the software pulls 300 to 600 verified homeowner phone numbers every single day from Google Maps, Instagram, and local directories, and starts warm customer chats on autopilot.
-- We also build modern, high-converting websites and landing pages designed to turn traffic into paying clients.
+- We build custom 24/7 Autonomous WhatsApp Lead Finder Bots and modern high-converting websites for contractors and local businesses (USA, UK, Canada, Australia).
+- We help local contractors book 15 to 30+ extra high-paying client jobs every month on autopilot.
 - We do NOT do phone calls. Everything is handled directly inside WhatsApp chat.
 
 CRITICAL PRICING & QUOTE RULE:
@@ -35,6 +34,11 @@ CRITICAL PRICING & QUOTE RULE:
   "Our owner will assist you directly in this chat in under 20 minutes with exact custom pricing and packages! In the meantime, what kind of monthly volume or setup are you looking for?"
   For Hindi/Hinglish:
   "Humare owner aapko isi chat me agle 20 minute ke andar pricing aur packages ke baare me personally assist karenge! Tab tak aap bataye normally aapko kaisa setup ya daily kitni leads chahiye?"
+
+REPAIR / SERVICE CONFUSION CLARIFICATION RULE:
+- If the lead asks for "pictures", "photos", "what kind of job", "address", "leak", or thinks you are a customer needing repairs or service:
+  IMMEDIATELY clarify politely:
+  "Hey, sorry for any confusion! I'm Shaurya from Webify, not a customer needing repairs. We build modern high-converting websites and automated lead generation systems for local contractors. Reached out to see if you guys are currently looking to take on more jobs this month?"
 
 CRITICAL CONVERSATIONAL MEMORY & TONE RULES:
 1. TALK LIKE A REAL HUMAN texting a friend or fellow business owner on WhatsApp. Short, direct, conversational (1 to 3 short sentences).
@@ -231,38 +235,13 @@ const TRADE_MAP = {
   gym: 'fitness gym'
 };
 
-const GREETINGS = [
-  'Hey!',
-  'Hi!',
-  'Hey there!',
-  'Hello!',
-  'Good morning!',
-  'Good afternoon!',
-  'Hi there!',
-  'Hope your day is going well!',
-  'Hey, hope you guys are doing well!'
-];
-
-const OPENERS = [
-  'Quick question,',
-  'Wanted to ask,',
-  'Just checking in,',
-  'Quick check with you guys—',
-  'Reaching out to ask,',
-  'Had a quick question for you,'
-];
-
-const INQUIRIES = [
-  (trade, city) => `do you guys take on ${trade} jobs in the ${city} area?`,
-  (trade, city) => `are you currently booking new ${trade} client work in ${city}?`,
-  (trade, city) => `do you have availability for ${trade} projects around ${city} right now?`,
-  (trade, city) => `do you guys service the ${city} area for ${trade}?`,
-  (trade, city) => `are you taking on new ${trade} projects in ${city} this season?`,
-  (trade, city) => `do you handle ${trade} jobs around ${city}?`,
-  (trade, city) => `are you guys open for new ${trade} work in ${city} right now?`,
-  (trade, city) => `are you currently accepting new ${trade} clients in the ${city} area?`,
-  (trade, city) => `wanted to check if you guys handle ${trade} jobs in ${city}?`,
-  (trade, city) => `quick check if you have availability for ${trade} projects in ${city}?`
+const DIRECT_WEBIFY_TEMPLATES = [
+  (trade, city) => `Hey! I'm Shaurya from Webify. We build modern high-converting websites and automated customer outreach for ${trade} companies in ${city}. Are you guys looking to take on more client jobs this month?`,
+  (trade, city) => `Hi there! I'm Shaurya from Webify. Reaching out because we help local ${trade} contractors around ${city} bring in more high-paying clients through custom websites and automated outreach. Do you have capacity for more jobs right now?`,
+  (trade, city) => `Hey! Shaurya from Webify here. We build automated client acquisition systems and modern websites for ${trade} businesses in ${city}. Wanted to check if you guys are currently looking for more client work?`,
+  (trade, city) => `Hi! I'm Shaurya from Webify. Found your business while researching top ${trade} services in ${city}. We help contractors book 15-25 extra jobs every month through modern websites and automated outreach. Would you be open to taking on more projects?`,
+  (trade, city) => `Hey! Quick message—I'm Shaurya from Webify. We design high-converting websites and automated WhatsApp client outreach for ${trade} pros in ${city}. Are you guys currently accepting more work?`,
+  (trade, city) => `Hi! Shaurya from Webify here. Reaching out to see if your ${trade} business in ${city} has room on the schedule for more qualified homeowner inquiries this month? We build custom websites and automated client systems for contractors.`
 ];
 
 function addInvisibleWatermark(text) {
@@ -277,10 +256,8 @@ function addInvisibleWatermark(text) {
 }
 
 function generateSpintaxOutreach(trade, city) {
-  const g = GREETINGS[Math.floor(Math.random() * GREETINGS.length)];
-  const op = OPENERS[Math.floor(Math.random() * OPENERS.length)];
-  const inq = INQUIRIES[Math.floor(Math.random() * INQUIRIES.length)](trade, city);
-  return addInvisibleWatermark(`${g} ${op} ${inq}`);
+  const template = DIRECT_WEBIFY_TEMPLATES[Math.floor(Math.random() * DIRECT_WEBIFY_TEMPLATES.length)];
+  return addInvisibleWatermark(template(trade, city));
 }
 
 function sanitizeOutreach(rawText, trade, city) {
@@ -301,9 +278,9 @@ function sanitizeOutreach(rawText, trade, city) {
 }
 
 /**
- * Generate Step 1 Initial Outreach Inquiry
+ * Generate Step 1 Initial Outreach (Straight to the point from Shaurya at Webify)
  */
-async function generateOutreachMessage(leadOrName = '', fallbackTrade = 'business', fallbackCity = 'your area', country = 'USA') {
+async function generateOutreachMessage(leadOrName = '', fallbackTrade = 'contractor', fallbackCity = 'your area', country = 'USA') {
   let lead = {};
   if (typeof leadOrName === 'object' && leadOrName !== null) {
     lead = leadOrName;
@@ -311,7 +288,7 @@ async function generateOutreachMessage(leadOrName = '', fallbackTrade = 'busines
     lead = { name: leadOrName, trade: fallbackTrade, city: fallbackCity, country: country };
   }
 
-  let rawTrade = (lead.trade || lead.niche || 'local service').toLowerCase();
+  let rawTrade = (lead.trade || lead.niche || 'local contractor').toLowerCase();
   const parenMatch = rawTrade.match(/^(.*?)\s*\((.*?)\)$/);
   let city = lead.city || 'your area';
   if (parenMatch) {
@@ -328,22 +305,24 @@ async function generateOutreachMessage(leadOrName = '', fallbackTrade = 'busines
     const prompt = [
       {
         role: 'system',
-        content: `You are texting a local service business on WhatsApp.
+        content: `You are Shaurya from Webify, texting a local ${trade} business in ${city}.
 CRITICAL RULES:
-- The business trade is "${trade}" in "${city}".
-- Write a short, friendly 1-sentence inquiry asking if they currently service or take on ${trade} projects in ${city}.
-- NEVER pitch, sell, or mention bots/websites.
-- Write like a real local customer asking a simple question.`
+- Always be STRAIGHT TO THE POINT.
+- Introduce yourself as "I'm Shaurya from Webify" or "Shaurya from Webify here".
+- Explain in 1 sentence that we build modern high-converting websites and automated client outreach systems that help local ${trade} contractors get more high-paying jobs.
+- Ask if they are currently looking to take on more client work or jobs this month.
+- NEVER pretend to be a customer needing repairs or service.
+- Real human WhatsApp tone: friendly, casual, confident, 2 short sentences max.`
       },
       {
         role: 'user',
-        content: `Write a short 1-sentence WhatsApp inquiry to this ${trade} business in ${city}.`
+        content: `Write a short, direct 2-sentence WhatsApp outreach message to this ${trade} business in ${city}.`
       }
     ];
 
     const generated = await generateAiResponse(prompt, 0.7);
     const cleaned = sanitizeOutreach(generated, trade, city);
-    if (cleaned && cleaned.length > 15 && cleaned.length < 120 && !cleaned.includes('[')) {
+    if (cleaned && cleaned.length > 20 && cleaned.length < 180 && !cleaned.includes('[')) {
       return cleaned;
     }
   } catch (e) {}
@@ -375,6 +354,11 @@ function generateSmartHumanFallback(incomingText, profile = {}, history = []) {
   // Pricing inquiry
   if (/\b(price|cost|how much|pricing|rates|quote|fee|charge|package|packages)\b/i.test(lower)) {
     return `Our owner will assist you directly in this chat in under 20 minutes with exact custom pricing and packages! In the meantime, what kind of monthly volume or setup are you looking for?`;
+  }
+
+  // Repair / Job / Picture confusion handler (e.g. "What kind any pictures", "send pictures", "address", "what damage")
+  if (/\b(picture|pictures|photo|photos|what kind|damage|leak|address|where are you located|what's the issue|whats the issue)\b/i.test(lower)) {
+    return `Hey, sorry for the confusion! I'm Shaurya from Webify, not a customer needing repairs. We build modern high-converting websites and automated client acquisition systems for local ${trade} contractors. Reached out to see if you guys are looking to take on more jobs this month, or if your schedule is already packed?`;
   }
 
   // "Who is this?" / "How did you get my number?"
