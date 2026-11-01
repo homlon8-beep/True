@@ -916,10 +916,7 @@ function isDeviceConnected(deviceId) {
 
 function isDeviceReadyForOutreach(deviceId) {
   const s = devices.get(parseInt(deviceId, 10));
-  if (!s || !s.isConnected) return false;
-  // Ready if history sync completed or at least 60 seconds have elapsed since connection
-  if (s.isHistorySynced) return true;
-  return s.connectedAt && (Date.now() - s.connectedAt > 60000);
+  return Boolean(s && s.isConnected);
 }
 
 function getDeviceQr(deviceId) {

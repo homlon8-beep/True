@@ -341,16 +341,10 @@ async function runDeviceWorker(deviceId) {
       continue;
     }
 
-    // 3. Check if this specific device is connected & history is fully synced
+    // 3. Check if this specific device is connected
     if (!whatsapp.isDeviceConnected(deviceId)) {
       state.currentStatus = `Waiting for WhatsApp QR scan on /qr?device=${deviceId}...`;
       await sleep(8000);
-      continue;
-    }
-
-    if (typeof whatsapp.isDeviceReadyForOutreach === 'function' && !whatsapp.isDeviceReadyForOutreach(deviceId)) {
-      state.currentStatus = `Syncing chat history & shielding existing contacts for Device ${deviceId}...`;
-      await sleep(4000);
       continue;
     }
 
