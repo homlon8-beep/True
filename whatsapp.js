@@ -233,11 +233,11 @@ async function initDevice(deviceId, onReadyCallback) {
     },
     logger: pino({ level: 'silent' }),
     printQRInTerminal: false,
-    browser: Browsers.macOS('Desktop'),
+    browser: Browsers.windows('Chrome'),
     keepAliveIntervalMs: 25000,
-    connectTimeoutMs: 60000,
-    defaultQueryTimeoutMs: 60000,
-    syncFullHistory: true,
+    connectTimeoutMs: 30000,
+    defaultQueryTimeoutMs: 30000,
+    syncFullHistory: false,
     shouldSyncHistoryMessage: () => true,
     markOnlineOnConnect: true,
     retryRequestDelayMs: 350,
@@ -798,7 +798,11 @@ async function logoutDevice(deviceId) {
   if (session && session.sock) {
     try {
       session.sock.ev.removeAllListeners();
-      await session.sock.logout();
+      if (session.isConnected) {
+        await session.sock.logout().catch(() => {});
+      } else {
+        session.sock.end();
+      }
     } catch (e) {}
     session.sock = null;
     session.isConnected = false;
