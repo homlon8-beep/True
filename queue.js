@@ -432,9 +432,17 @@ async function runDeviceWorker(deviceId) {
 
     lead.jid = waCheck.jid || formatted.jid;
 
-    // Double-check verified WhatsApp JID and LID against existing chats
-    if (whatsapp.hasExistingChat(lead.jid) || whatsapp.hasExistingChat(lead.phone) || (waCheck.lid && whatsapp.hasExistingChat(waCheck.lid))) {
-      console.log(`⏩ [Past Conversation Shield Device ${deviceId}] Verified WhatsApp account ${lead.jid} (+${lead.phone}) has existing chat. Skipping!`);
+    // Double-check verified WhatsApp JID and LID against all existing chats & memories
+    const isAlreadyChatted = 
+      whatsapp.hasExistingChat(lead.phone) ||
+      whatsapp.hasExistingChat(lead.jid) ||
+      (waCheck.lid && whatsapp.hasExistingChat(waCheck.lid)) ||
+      scraper.isPhoneAlreadySent(lead.phone) ||
+      chatMemory.hasConversation(lead.phone) ||
+      (waCheck.lid && chatMemory.hasConversation(waCheck.lid));
+
+    if (isAlreadyChatted) {
+      console.log(`⏩ [Past Conversation Shield Device ${deviceId}] Verified WhatsApp account ${lead.jid} (+${lead.phone}, LID: ${waCheck.lid}) has existing chat. Skipping!`);
       scraper.updateLeadStatus(lead.phone, 'already_contacted', 'Prior chat history found on WhatsApp', deviceId);
       continue;
     }
@@ -447,7 +455,7 @@ async function runDeviceWorker(deviceId) {
     state.currentStatus = `Sending outreach to +${lead.phone}...`;
     let sendSucceeded = false;
     try {
-      const sent = await whatsapp.sendTextMessage(deviceId, lead.jid, outreachText);
+      const sent = await whatsapp.sendTextMessage(deviceId, lead.jid, outreachText, { lid: waCheck.lid, phone: lead.phone });
       if (sent) {
         scraper.updateLeadStatus(lead.phone, 'sent', null, deviceId);
         chatMemory.recordOutreach(lead.phone, outreachText, {
@@ -463,8 +471,8 @@ async function runDeviceWorker(deviceId) {
         sendSucceeded = true;
         console.log(`✅ [Real WhatsApp Sent by Device ${deviceId} (${state.currentBatchCount}/${state.currentBatchLimit})] To +${lead.phone}. Today: ${state.dailySentCount}/${getDailyMaxLeadsPerDevice()}`);
       } else {
-        state.consecutiveFailures++;
-        scraper.updateLeadStatus(lead.phone, 'failed', 'Socket send failure', deviceId);
+        scraper.updateLeadStatus(lead.phone, 'already_contacted', 'Blocked by socket duplicate shield', deviceId);
+        continue;
       }
     } catch (sendErr) {
       state.consecutiveFailures++;

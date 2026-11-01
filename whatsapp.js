@@ -646,10 +646,28 @@ async function initAllDevices(onReadyCallback) {
 /**
  * Send Text Message through a specific device (with authentic typing presence)
  */
-async function sendTextMessage(deviceId, jid, text) {
+async function sendTextMessage(deviceId, jid, text, metadata = {}) {
   const session = devices.get(parseInt(deviceId, 10));
   if (!session || !session.sock || !session.isConnected) {
     console.warn(`Cannot send message: Device ${deviceId} is not connected`);
+    return false;
+  }
+
+  // 0. ULTIMATE RECIPIENT SHIELD: Absolute Zero Duplicate Outreach Guard
+  const targetClean = String(jid).split('@')[0].replace(/\D/g, '');
+  const lidClean = metadata.lid ? String(metadata.lid).split('@')[0].replace(/\D/g, '') : null;
+  const phoneClean = metadata.phone ? String(metadata.phone).replace(/\D/g, '') : null;
+
+  const isBlocked = 
+    hasExistingChat(jid) || 
+    hasExistingChat(targetClean) || 
+    scraper.isPhoneAlreadySent(targetClean) || 
+    chatMemory.hasConversation(targetClean) ||
+    (lidClean && (hasExistingChat(lidClean) || chatMemory.hasConversation(lidClean) || scraper.isPhoneAlreadySent(lidClean))) ||
+    (phoneClean && (hasExistingChat(phoneClean) || chatMemory.hasConversation(phoneClean) || scraper.isPhoneAlreadySent(phoneClean)));
+
+  if (isBlocked) {
+    console.warn(`🛑 [BLOCKED DUPLICATE AT SOCKET LEVEL]: Device ${deviceId} attempted to text ${jid} (LID: ${lidClean}, Phone: ${phoneClean}), but recipient has past interaction. REFUSING TO SEND!`);
     return false;
   }
 
@@ -776,9 +794,9 @@ async function checkNumberOnWhatsApp(deviceId, phoneOrJid) {
     const [result] = await targetSession.sock.onWhatsApp(checkJid);
 
     if (result && result.exists) {
-      return { exists: true, jid: result.jid };
+      return { exists: true, jid: result.jid, lid: result.lid || null };
     }
-    return { exists: false, jid: null };
+    return { exists: false, jid: null, lid: null };
   } catch (err) {
     console.warn(`⚠️ [WhatsApp Verify Warning on Device ${targetSession.id} for ${phoneOrJid}]:`, err.message);
     return { exists: false, jid: null };
