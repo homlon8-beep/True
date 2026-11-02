@@ -851,6 +851,73 @@ async function checkNumberOnWhatsApp(deviceId, phoneOrJid) {
 }
 
 /**
+ * High-Speed Batch Pre-Verifier: Verifies up to 30 numbers in a SINGLE 500ms USync query
+ * Returns Map<cleanPhone, { exists: boolean, jid: string|null, lid: string|null }>
+ */
+async function checkNumbersBatchOnWhatsApp(deviceId, phoneList = []) {
+  const resultMap = new Map();
+  if (!Array.isArray(phoneList) || phoneList.length === 0) return resultMap;
+
+  let targetSession = devices.get(parseInt(deviceId, 10));
+  if (!targetSession || !targetSession.isConnected) {
+    for (const s of devices.values()) {
+      if (s.isConnected) {
+        targetSession = s;
+        break;
+      }
+    }
+  }
+
+  if (!targetSession || !targetSession.sock || !targetSession.isConnected) {
+    for (const p of phoneList) {
+      const clean = String(p).replace(/\D/g, '');
+      resultMap.set(clean, { exists: false, jid: null, lid: null });
+    }
+    return resultMap;
+  }
+
+  const jidToPhone = new Map();
+  const jidsToCheck = [];
+  for (const p of phoneList) {
+    const clean = String(p).replace(/\D/g, '');
+    const formatted = scraper.formatWhatsAppJid(clean);
+    const jid = formatted ? formatted.jid : `${clean}@s.whatsapp.net`;
+    jidToPhone.set(jid, clean);
+    jidsToCheck.push(jid);
+    resultMap.set(clean, { exists: false, jid: null, lid: null });
+  }
+
+  try {
+    const checkPromise = targetSession.sock.onWhatsApp(...jidsToCheck);
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Batch WhatsApp verification timed out after 8s')), 8000)
+    );
+    const results = await Promise.race([checkPromise, timeoutPromise]);
+
+    if (Array.isArray(results)) {
+      for (const res of results) {
+        if (!res) continue;
+        const matchingClean = jidToPhone.get(res.jid) || String(res.jid).split('@')[0].replace(/\D/g, '');
+        if (res.exists) {
+          if (res.lid && res.jid) {
+            registerLidPhonePair(res.lid, res.jid);
+          }
+          resultMap.set(matchingClean, {
+            exists: true,
+            jid: res.jid,
+            lid: res.lid || null
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`⚠️ [Batch WhatsApp Verify Warning on Device ${targetSession.id}]:`, err.message);
+  }
+
+  return resultMap;
+}
+
+/**
  * Logout and clear credentials for a specific device slot
  */
 async function logoutDevice(deviceId) {
@@ -965,6 +1032,7 @@ module.exports = {
   getDeviceQr,
   sendTextMessage,
   checkNumberOnWhatsApp,
+  checkNumbersBatchOnWhatsApp,
   hasExistingChat,
   getExistingChatsSet,
   // Backwards compatibility

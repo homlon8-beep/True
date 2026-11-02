@@ -358,7 +358,19 @@ async function runDeviceWorker(deviceId) {
         .finally(() => { isProactiveScraping = false; });
     }
 
-    // 5. Atomic Claim: Grab next unassigned lead for this device
+    // 4b. HIGH-SPEED PRE-VERIFIER: Filter out landlines in bulk (25 at a time) BEFORE queue claiming
+    const verifiedReady = typeof scraper.getVerifiedQueuedLeadsCount === 'function' ? scraper.getVerifiedQueuedLeadsCount(deviceId) : 0;
+    if (verifiedReady < 8) {
+      const unverified = typeof scraper.getUnverifiedQueuedLeads === 'function' ? scraper.getUnverifiedQueuedLeads(25) : [];
+      if (unverified && unverified.length > 0) {
+        state.currentStatus = `⚡ Pre-filtering ${unverified.length} numbers (saving only verified WhatsApp mobile users)...`;
+        const phoneList = unverified.map(l => l.phone);
+        const resultsMap = await whatsapp.checkNumbersBatchOnWhatsApp(deviceId, phoneList);
+        scraper.markBatchVerificationResults(resultsMap);
+      }
+    }
+
+    // 5. Atomic Claim: Grab next PRE-VERIFIED WhatsApp lead for this device
     let lead = scraper.claimNextLead(deviceId);
     if (!lead) {
       state.currentStatus = `Queue Empty: Harvesting fresh leads for Device ${deviceId}...`;
@@ -386,7 +398,7 @@ async function runDeviceWorker(deviceId) {
       continue;
     }
 
-    lead.jid = formatted.jid;
+    lead.jid = lead.jid || formatted.jid;
     lead.phone = formatted.cleanNumber;
 
     // 7. Strict Multi-Layer Past Conversation & Sent Shield
@@ -414,17 +426,20 @@ async function runDeviceWorker(deviceId) {
       }
     }
 
-    // 8. Verify WhatsApp registration
-    state.currentStatus = `Checking WhatsApp registration for +${lead.phone}...`;
-    const waCheck = await whatsapp.checkNumberOnWhatsApp(deviceId, lead.phone);
-    if (!waCheck.exists) {
-      console.log(`❌ [Device ${deviceId}] +${lead.phone} is not registered on WhatsApp. Skipping!`);
-      scraper.updateLeadStatus(lead.phone, 'not_on_whatsapp', null, deviceId);
-      await sleep(300);
-      continue;
+    // 8. WhatsApp Registration Check (Instant 0ms bypass if already pre-verified in bulk!)
+    let waCheck = { exists: lead.whatsapp_verified === true, jid: lead.jid, lid: lead.lid || null };
+    if (!lead.whatsapp_verified) {
+      state.currentStatus = `Checking WhatsApp registration for +${lead.phone}...`;
+      waCheck = await whatsapp.checkNumberOnWhatsApp(deviceId, lead.phone);
+      if (!waCheck.exists) {
+        console.log(`❌ [Device ${deviceId}] +${lead.phone} is not registered on WhatsApp. Skipping!`);
+        scraper.updateLeadStatus(lead.phone, 'not_on_whatsapp', null, deviceId);
+        await sleep(300);
+        continue;
+      }
     }
 
-    lead.jid = waCheck.jid || formatted.jid;
+    lead.jid = waCheck.jid || lead.jid || formatted.jid;
 
     // Double-check verified WhatsApp JID and LID against all existing chats & memories
     const isAlreadyChatted = 
