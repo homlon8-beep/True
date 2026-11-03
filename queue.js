@@ -24,17 +24,17 @@ const CONFIG_FILE = path.join(__dirname, 'bot_config.json');
 function loadBotConfig() {
   const defaults = {
     dailyMaxLeadsPerDevice: parseInt(process.env.DAILY_MAX_LEADS_PER_DEVICE || '50', 10),
-    minMsgDelayMs: parseInt(process.env.MIN_MSG_DELAY_MS || '35000', 10),
-    maxMsgDelayMs: parseInt(process.env.MAX_MSG_DELAY_MS || '70000', 10),
-    minBreakMins: parseInt(process.env.MIN_BREAK_MINS || '5', 10),
-    maxBreakMins: parseInt(process.env.MAX_BREAK_MINS || '10', 10),
-    minBatchSize: 8,
-    maxBatchSize: 12,
+    minMsgDelayMs: 45000,
+    maxMsgDelayMs: 90000,
+    minBreakMins: 14,
+    maxBreakMins: 26,
+    minBatchSize: 1,
+    maxBatchSize: 3,
     businessHoursShield: false,
     specialDeviceNumber: '9416085989',
     specialDailyLimit: 10,
     vaultCode: '3369',
-    pacingPreset: 'fast' // 'turbo', 'fast', 'balanced', 'enterprise', 'custom'
+    pacingPreset: 'extreme_human' // 'extreme_human', 'fast', 'turbo', 'balanced', 'ultra_safe'
   };
 
   try {
@@ -89,7 +89,15 @@ function setDailyMaxLeadsPerDevice(count, preset = 'custom') {
   const updates = { dailyMaxLeadsPerDevice: num, pacingPreset: preset };
 
   // Adjust pacing intelligently if presets are chosen
-  if (preset === 'turbo') {
+  if (preset === 'extreme_human') {
+    updates.minMsgDelayMs = 45000;
+    updates.maxMsgDelayMs = 90000;
+    updates.minBreakMins = 14;
+    updates.maxBreakMins = 26;
+    updates.minBatchSize = 1;
+    updates.maxBatchSize = 3;
+    updates.businessHoursShield = false;
+  } else if (preset === 'turbo') {
     updates.minMsgDelayMs = 20000;
     updates.maxMsgDelayMs = 35000;
     updates.minBreakMins = 1;
@@ -237,15 +245,29 @@ function getGaussianMsgDelayMs(minMs = botConfig.minMsgDelayMs || 180000, maxMs 
   return Math.floor(sample);
 }
 
+function getRandomClusterLimit() {
+  // Natural human distribution: mostly 2 messages, occasionally 1 or 3
+  const roll = Math.random();
+  if (roll < 0.25) return 1;
+  if (roll < 0.85) return 2;
+  return 3;
+}
+
+function getRandomBatchLimit() {
+  return getRandomClusterLimit();
+}
+
 function getRandomMsgDelayMs() {
-  return getGaussianMsgDelayMs(botConfig.minMsgDelayMs || 35000, botConfig.maxMsgDelayMs || 70000);
+  return getGaussianMsgDelayMs(botConfig.minMsgDelayMs || 45000, botConfig.maxMsgDelayMs || 90000);
 }
 
 function getRandomBreakDurationMs() {
-  const minMins = botConfig.minBreakMins || 5;
-  const maxMins = botConfig.maxBreakMins || 10;
+  // Deep random human pause: 14 to 26 minutes (averaging ~20 minutes)
+  const minMins = botConfig.minBreakMins || 14;
+  const maxMins = botConfig.maxBreakMins || 26;
   const mins = minMins + Math.random() * (maxMins - minMins);
-  return Math.floor(mins * 60 * 1000);
+  const jitterSecs = Math.floor(Math.random() * 60);
+  return Math.floor(mins * 60 * 1000 + jitterSecs * 1000);
 }
 
 function isOperatingHours() {
@@ -473,28 +495,27 @@ async function runDeviceWorker(deviceId) {
       continue;
     }
 
-    // 11. Human Pacing / Breaks
+    // 11. Extreme Human Pacing / Deep Random Breaks (like 2 now, 2 after 20 mins)
     if (sendSucceeded) {
       if (state.currentBatchCount >= state.currentBatchLimit) {
         const breakMs = getRandomBreakDurationMs();
-        const breakMins = Math.round(breakMs / 60000);
+        const breakMins = (breakMs / 60000).toFixed(1);
         state.nextActionTime = Date.now() + breakMs;
-        state.currentStatus = `Batch of ${state.currentBatchLimit} sent! Scheduled rest interval (${breakMins}m)...`;
-        console.log(`\n☕ [Pacing Rhythm Device ${deviceId}] Batch limit hit (${state.currentBatchLimit} sent). Scheduled ${breakMins}-minute rest until ${formatLocalTime(state.nextActionTime)}...\n`);
+        state.currentStatus = `Cluster of ${state.currentBatchLimit} sent! Natural pause (~${Math.round(breakMins)}m until ${formatLocalTime(state.nextActionTime)})...`;
+        console.log(`\n☕ [Extreme Human Break Device ${deviceId}] Sent cluster of ${state.currentBatchLimit}. Taking ${breakMins}-minute break until ${formatLocalTime(state.nextActionTime)}...\n`);
 
         await sleep(breakMs);
 
         state.currentBatchCount = 0;
-        state.currentBatchLimit = getRandomBatchLimit();
-        console.log(`⚡ [Worker Device ${deviceId}] Rest finished! Next batch rolled: ${state.currentBatchLimit} leads.`);
+        state.currentBatchLimit = getRandomClusterLimit();
+        console.log(`⚡ [Worker Device ${deviceId}] Rest finished! Next cluster rolled: ${state.currentBatchLimit} leads.`);
       } else {
-        // Random 3 to 6 minutes delay between conversations for completely natural delivery
+        // Natural human typing/reading pause inside the cluster (45s to 90s)
         const jitterDelayMs = getRandomMsgDelayMs();
         const delaySec = Math.round(jitterDelayMs / 1000);
-        const delayMins = (delaySec / 60).toFixed(1);
         state.nextActionTime = Date.now() + jitterDelayMs;
-        state.currentStatus = `Natural delivery cadence (${delayMins}m pause)...`;
-        console.log(`⏳ [Pacing Device ${deviceId}] Next lead scheduled at ${formatLocalTime(state.nextActionTime)} (${delayMins}m pause)...`);
+        state.currentStatus = `Cluster in progress (${state.currentBatchCount}/${state.currentBatchLimit}). Next lead in ${delaySec}s...`;
+        console.log(`⏳ [In-Cluster Delay Device ${deviceId}] Lead ${state.currentBatchCount}/${state.currentBatchLimit}. Waiting ${delaySec}s before next send...`);
         await sleep(jitterDelayMs);
       }
     } else {
