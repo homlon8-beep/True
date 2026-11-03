@@ -332,8 +332,7 @@ function addLeadsToQueue(newLeads = [], defaultAccount = null) {
 }
 
 /**
- * Atomic Lead Claiming: Prioritizes ALREADY PRE-VERIFIED WhatsApp leads
- * Guarantees NO two devices ever message or touch the same lead
+ * Atomic Lead Claiming: Guarantees NO two devices ever message or touch the same lead
  */
 function claimNextLead(deviceId) {
   const db = loadDatabase();
@@ -350,35 +349,16 @@ function claimNextLead(deviceId) {
     return true;
   };
 
-  // 1. TOP PRIORITY: Pre-verified WhatsApp lead assigned to this device
+  // 1. Look for a queued lead specifically assigned to this device
   let lead = db.leads.find(l => {
     if (!isValidTargetLead(l)) return false;
-    if (l.status === 'queued' && l.whatsapp_verified === true && (l.assignedAccount === devKey1 || l.assignedAccount === devKey2 || l.assignedAccount === String(deviceId))) {
+    if (l.status === 'queued' && (l.assignedAccount === devKey1 || l.assignedAccount === devKey2 || l.assignedAccount === String(deviceId))) {
       return true;
     }
     return false;
   });
 
-  // 2. TOP PRIORITY: Any unassigned pre-verified WhatsApp lead
-  if (!lead) {
-    lead = db.leads.find(l => {
-      if (!isValidTargetLead(l)) return false;
-      return l.status === 'queued' && l.whatsapp_verified === true && !l.assignedAccount;
-    });
-  }
-
-  // 3. SECONDARY: Any queued lead specifically assigned to this device
-  if (!lead) {
-    lead = db.leads.find(l => {
-      if (!isValidTargetLead(l)) return false;
-      if (l.status === 'queued' && (l.assignedAccount === devKey1 || l.assignedAccount === devKey2 || l.assignedAccount === String(deviceId))) {
-        return true;
-      }
-      return false;
-    });
-  }
-
-  // 4. SECONDARY: Any unassigned queued lead
+  // 2. If none, grab an unassigned queued lead
   if (!lead) {
     lead = db.leads.find(l => {
       if (!isValidTargetLead(l)) return false;
@@ -386,7 +366,7 @@ function claimNextLead(deviceId) {
     });
   }
 
-  // 5. Fallback: Recover stalled processing lead (> 15 minutes ago)
+  // 3. Fallback: Recover stalled processing lead (> 15 minutes ago)
   if (!lead) {
     lead = db.leads.find(l => {
       if (!isValidTargetLead(l)) return false;
@@ -409,75 +389,9 @@ function claimNextLead(deviceId) {
   return null;
 }
 
-/**
- * Get unverified queued leads for batch pre-verification
- */
-function getUnverifiedQueuedLeads(limit = 25) {
-  const db = loadDatabase();
-  const unverified = [];
-  for (const l of db.leads) {
-    if (l.status === 'queued' && !l.whatsapp_verified && l.status !== 'not_on_whatsapp') {
-      const p = String(l.phone).replace(/\D/g, '');
-      if (!p.startsWith('91') && l.country !== 'India' && !isPhoneAlreadySent(p)) {
-        unverified.push(l);
-        if (unverified.length >= limit) break;
-      }
-    }
-  }
-  return unverified;
-}
-
-/**
- * Count how many pre-verified WhatsApp leads are waiting in queue
- */
-function getVerifiedQueuedLeadsCount(deviceId = null) {
-  const db = loadDatabase();
-  const devKey1 = deviceId ? `device_${deviceId}` : null;
-  const devKey2 = deviceId ? `account_${deviceId}` : null;
-
-  return db.leads.filter(l => {
-    if (l.status !== 'queued' || l.whatsapp_verified !== true) return false;
-    const p = String(l.phone).replace(/\D/g, '');
-    if (p.startsWith('91') || isPhoneAlreadySent(p)) return false;
-    if (deviceId) {
-      return (l.assignedAccount === devKey1 || l.assignedAccount === devKey2 || !l.assignedAccount);
-    }
-    return true;
-  }).length;
-}
-
-/**
- * Apply batch WhatsApp verification results to the database in bulk
- */
-function markBatchVerificationResults(resultsMap) {
-  if (!resultsMap || !(resultsMap instanceof Map) || resultsMap.size === 0) return 0;
-  const db = loadDatabase();
-  let updatedCount = 0;
-
-  for (const lead of db.leads) {
-    if (lead.status === 'queued' && !lead.whatsapp_verified) {
-      const clean = String(lead.phone).replace(/\D/g, '');
-      if (resultsMap.has(clean)) {
-        const info = resultsMap.get(clean);
-        if (info.exists) {
-          lead.whatsapp_verified = true;
-          if (info.jid) lead.jid = info.jid;
-          if (info.lid) lead.lid = info.lid;
-        } else {
-          lead.status = 'not_on_whatsapp';
-          lead.whatsapp_verified = false;
-        }
-        updatedCount++;
-      }
-    }
-  }
-
-  if (updatedCount > 0) {
-    saveDatabase(db);
-    console.log(`🛡️ [Pre-Verifier] Updated ${updatedCount} leads in DB (${db.leads.filter(l => l.status === 'queued' && l.whatsapp_verified).length} verified WhatsApp leads ready in queue).`);
-  }
-  return updatedCount;
-}
+function getUnverifiedQueuedLeads(limit = 25) { return []; }
+function getVerifiedQueuedLeadsCount(deviceId = null) { return 0; }
+function markBatchVerificationResults(resultsMap) { return 0; }
 
 function releaseLeadClaim(phone) {
   const db = loadDatabase();

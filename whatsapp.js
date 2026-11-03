@@ -708,22 +708,14 @@ async function sendTextMessage(deviceId, jid, text, metadata = {}) {
   }
 
   try {
-    // 1. Subscribe to presence & set available
-    try { await session.sock.presenceSubscribe(jid); } catch (e) {}
-    await session.sock.sendPresenceUpdate('available');
-    await sleep(2000 + Math.random() * 2000);
+    // 1. Natural short typing presence (Zero presenceSubscribe to avoid bot triggers)
+    try {
+      await session.sock.sendPresenceUpdate('composing', jid);
+      await sleep(1200 + Math.random() * 1200);
+      await session.sock.sendPresenceUpdate('paused', jid);
+    } catch (e) {}
 
-    // 2. Realistic keystroke typing presence
-    await session.sock.sendPresenceUpdate('composing', jid);
-    const charCount = (text || '').length;
-    const typingDelay = Math.min(9500, Math.max(3500, Math.floor(charCount * (45 + Math.random() * 25))));
-    await sleep(typingDelay);
-
-    // 3. Natural human hesitation pause before hitting Enter
-    await session.sock.sendPresenceUpdate('paused', jid);
-    await sleep(1200 + Math.random() * 1500);
-
-    // 4. Send message with strict 15s network timeout
+    // 2. Direct message send with strict 15s timeout
     const sendPromise = session.sock.sendMessage(jid, { text });
     const sendTimeout = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('Socket sendMessage timed out after 15s')), 15000)
@@ -733,7 +725,7 @@ async function sendTextMessage(deviceId, jid, text, metadata = {}) {
       storeMessage(sentMsg.key.id, sentMsg.message);
     }
 
-    // 4. Auto-Archive & Hide Chat for locked numbers (e.g. 9416085989)
+    // 3. Auto-Archive & Hide Chat for locked numbers (e.g. 9416085989)
     const phone = session.phone ? String(session.phone).replace(/\D/g, '') : '';
     const isLockedNumber = phone.includes('9416085989') || (session.sock.user?.id && String(session.sock.user.id).includes('9416085989'));
     if (isLockedNumber && sentMsg) {
@@ -805,115 +797,31 @@ async function hideAndArchiveChat(session, jid, sentMsg) {
 }
 
 /**
- * Check if a number is registered on WhatsApp using a specific device (or any connected device)
+ * Number Check - PURE LOCAL FORMATTING (ZERO network socket queries to prevent bans)
+ * Your WhatsApp account only sends messages and never runs automated contact probes.
  */
 async function checkNumberOnWhatsApp(deviceId, phoneOrJid) {
-  let targetSession = devices.get(parseInt(deviceId, 10));
-  if (!targetSession || !targetSession.isConnected) {
-    // Fall back to any connected device
-    for (const s of devices.values()) {
-      if (s.isConnected) {
-        targetSession = s;
-        break;
-      }
-    }
+  let checkJid;
+  if (String(phoneOrJid).includes('@s.whatsapp.net')) {
+    checkJid = String(phoneOrJid);
+  } else {
+    const formatted = scraper.formatWhatsAppJid(phoneOrJid);
+    checkJid = formatted ? formatted.jid : `${String(phoneOrJid).replace(/\D/g, '')}@s.whatsapp.net`;
   }
-
-  if (!targetSession || !targetSession.sock || !targetSession.isConnected) {
-    return { exists: false, jid: null };
-  }
-
-  try {
-    let checkJid;
-    if (String(phoneOrJid).includes('@s.whatsapp.net')) {
-      checkJid = String(phoneOrJid);
-    } else {
-      const formatted = scraper.formatWhatsAppJid(phoneOrJid);
-      checkJid = formatted ? formatted.jid : `${String(phoneOrJid).replace(/\D/g, '')}@s.whatsapp.net`;
-    }
-    const checkPromise = targetSession.sock.onWhatsApp(checkJid);
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('WhatsApp verification query timed out after 8s')), 8000)
-    );
-    const [result] = await Promise.race([checkPromise, timeoutPromise]);
-
-    if (result && result.exists) {
-      if (result.lid && result.jid) {
-        registerLidPhonePair(result.lid, result.jid);
-      }
-      return { exists: true, jid: result.jid, lid: result.lid || null };
-    }
-    return { exists: false, jid: null, lid: null };
-  } catch (err) {
-    console.warn(`⚠️ [WhatsApp Verify Warning on Device ${targetSession.id} for ${phoneOrJid}]:`, err.message);
-    return { exists: false, jid: null };
-  }
+  return { exists: true, jid: checkJid, lid: null };
 }
 
 /**
- * High-Speed Batch Pre-Verifier: Verifies up to 30 numbers in a SINGLE 500ms USync query
- * Returns Map<cleanPhone, { exists: boolean, jid: string|null, lid: string|null }>
+ * Batch Number Check - PURE LOCAL (ZERO socket USync queries)
  */
 async function checkNumbersBatchOnWhatsApp(deviceId, phoneList = []) {
   const resultMap = new Map();
-  if (!Array.isArray(phoneList) || phoneList.length === 0) return resultMap;
-
-  let targetSession = devices.get(parseInt(deviceId, 10));
-  if (!targetSession || !targetSession.isConnected) {
-    for (const s of devices.values()) {
-      if (s.isConnected) {
-        targetSession = s;
-        break;
-      }
-    }
-  }
-
-  if (!targetSession || !targetSession.sock || !targetSession.isConnected) {
-    for (const p of phoneList) {
-      const clean = String(p).replace(/\D/g, '');
-      resultMap.set(clean, { exists: false, jid: null, lid: null });
-    }
-    return resultMap;
-  }
-
-  const jidToPhone = new Map();
-  const jidsToCheck = [];
   for (const p of phoneList) {
     const clean = String(p).replace(/\D/g, '');
     const formatted = scraper.formatWhatsAppJid(clean);
     const jid = formatted ? formatted.jid : `${clean}@s.whatsapp.net`;
-    jidToPhone.set(jid, clean);
-    jidsToCheck.push(jid);
-    resultMap.set(clean, { exists: false, jid: null, lid: null });
+    resultMap.set(clean, { exists: true, jid, lid: null });
   }
-
-  try {
-    const checkPromise = targetSession.sock.onWhatsApp(...jidsToCheck);
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Batch WhatsApp verification timed out after 8s')), 8000)
-    );
-    const results = await Promise.race([checkPromise, timeoutPromise]);
-
-    if (Array.isArray(results)) {
-      for (const res of results) {
-        if (!res) continue;
-        const matchingClean = jidToPhone.get(res.jid) || String(res.jid).split('@')[0].replace(/\D/g, '');
-        if (res.exists) {
-          if (res.lid && res.jid) {
-            registerLidPhonePair(res.lid, res.jid);
-          }
-          resultMap.set(matchingClean, {
-            exists: true,
-            jid: res.jid,
-            lid: res.lid || null
-          });
-        }
-      }
-    }
-  } catch (err) {
-    console.warn(`⚠️ [Batch WhatsApp Verify Warning on Device ${targetSession.id}]:`, err.message);
-  }
-
   return resultMap;
 }
 

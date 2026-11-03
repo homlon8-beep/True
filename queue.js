@@ -358,19 +358,7 @@ async function runDeviceWorker(deviceId) {
         .finally(() => { isProactiveScraping = false; });
     }
 
-    // 4b. HIGH-SPEED PRE-VERIFIER: Filter out landlines in bulk (25 at a time) BEFORE queue claiming
-    const verifiedReady = typeof scraper.getVerifiedQueuedLeadsCount === 'function' ? scraper.getVerifiedQueuedLeadsCount(deviceId) : 0;
-    if (verifiedReady < 8) {
-      const unverified = typeof scraper.getUnverifiedQueuedLeads === 'function' ? scraper.getUnverifiedQueuedLeads(25) : [];
-      if (unverified && unverified.length > 0) {
-        state.currentStatus = `⚡ Pre-filtering ${unverified.length} numbers (saving only verified WhatsApp mobile users)...`;
-        const phoneList = unverified.map(l => l.phone);
-        const resultsMap = await whatsapp.checkNumbersBatchOnWhatsApp(deviceId, phoneList);
-        scraper.markBatchVerificationResults(resultsMap);
-      }
-    }
-
-    // 5. Atomic Claim: Grab next PRE-VERIFIED WhatsApp lead for this device
+    // 5. Atomic Claim: Grab next queued lead for this device
     let lead = scraper.claimNextLead(deviceId);
     if (!lead) {
       state.currentStatus = `Queue Empty: Harvesting fresh leads for Device ${deviceId}...`;
@@ -426,32 +414,18 @@ async function runDeviceWorker(deviceId) {
       }
     }
 
-    // 8. WhatsApp Registration Check (Instant 0ms bypass if already pre-verified in bulk!)
-    let waCheck = { exists: lead.whatsapp_verified === true, jid: lead.jid, lid: lead.lid || null };
-    if (!lead.whatsapp_verified) {
-      state.currentStatus = `Checking WhatsApp registration for +${lead.phone}...`;
-      waCheck = await whatsapp.checkNumberOnWhatsApp(deviceId, lead.phone);
-      if (!waCheck.exists) {
-        console.log(`❌ [Device ${deviceId}] +${lead.phone} is not registered on WhatsApp. Skipping!`);
-        scraper.updateLeadStatus(lead.phone, 'not_on_whatsapp', null, deviceId);
-        await sleep(300);
-        continue;
-      }
-    }
+    // 8. Pure Direct Sending (Zero socket probes/tasks to prevent WhatsApp bans)
+    lead.jid = lead.jid || formatted.jid;
 
-    lead.jid = waCheck.jid || lead.jid || formatted.jid;
-
-    // Double-check verified WhatsApp JID and LID against all existing chats & memories
+    // Double-check verified WhatsApp JID against all existing chats & memories
     const isAlreadyChatted = 
       whatsapp.hasExistingChat(lead.phone) ||
       whatsapp.hasExistingChat(lead.jid) ||
-      (waCheck.lid && whatsapp.hasExistingChat(waCheck.lid)) ||
-      scraper.isPhoneAlreadySent(lead.phone) ||
-      (waCheck.lid && scraper.isPhoneAlreadySent(waCheck.lid)) ||
-      chatMemory.hasConversation(lead.phone, waCheck.lid);
+      scraper.isPhoneAlreadySent(lead.phone) || 
+      chatMemory.hasConversation(lead.phone);
 
     if (isAlreadyChatted) {
-      console.log(`⏩ [Past Conversation Shield Device ${deviceId}] Verified WhatsApp account ${lead.jid} (+${lead.phone}, LID: ${waCheck.lid}) has existing chat. Skipping!`);
+      console.log(`⏩ [Past Conversation Shield Device ${deviceId}] +${lead.phone} has existing chat. Skipping!`);
       scraper.updateLeadStatus(lead.phone, 'already_contacted', 'Prior chat history found on WhatsApp', deviceId);
       continue;
     }
@@ -460,11 +434,11 @@ async function runDeviceWorker(deviceId) {
     state.currentStatus = `Preparing personalized outreach for +${lead.phone}...`;
     const outreachText = await ai.generateOutreachMessage(lead);
 
-    // 10. Send via WhatsApp through this device
+    // 10. Send via WhatsApp through this device (ONLY SENDING, ZERO BACKGROUND PROBES)
     state.currentStatus = `Sending outreach to +${lead.phone}...`;
     let sendSucceeded = false;
     try {
-      const sent = await whatsapp.sendTextMessage(deviceId, lead.jid, outreachText, { lid: waCheck.lid, phone: lead.phone });
+      const sent = await whatsapp.sendTextMessage(deviceId, lead.jid, outreachText, { phone: lead.phone });
       if (sent) {
         scraper.updateLeadStatus(lead.phone, 'sent', null, deviceId);
         chatMemory.recordOutreach(lead.phone, outreachText, {
@@ -480,7 +454,7 @@ async function runDeviceWorker(deviceId) {
         sendSucceeded = true;
         console.log(`✅ [Real WhatsApp Sent by Device ${deviceId} (${state.currentBatchCount}/${state.currentBatchLimit})] To +${lead.phone}. Today: ${state.dailySentCount}/${getDailyMaxLeadsPerDevice()}`);
       } else {
-        scraper.updateLeadStatus(lead.phone, 'already_contacted', 'Blocked by socket duplicate shield', deviceId);
+        scraper.updateLeadStatus(lead.phone, 'failed', 'Delivery rejected or recipient not on WhatsApp', deviceId);
         continue;
       }
     } catch (sendErr) {
