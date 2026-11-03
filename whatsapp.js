@@ -602,49 +602,24 @@ async function processSlowHumanReply(session, pending) {
     const combinedIncomingText = messages.join('\n');
     console.log(`\n🤖 [Slow Human AI Device ${session.id} Responding to ${cleanPhone}]: "${combinedIncomingText.replace(/\n/g, ' ')}"`);
 
-    // 1. Mark as read (blue ticks)
-    try {
-      if (lastMsgKey) {
-        await session.sock.readMessages([lastMsgKey]);
-      }
-    } catch (e) {}
-
-    // 2. Slow human reading & thinking pause (12s to 24s)
-    const readPause = Math.floor(12000 + Math.random() * 12000);
+    // 1. Slow human reading & thinking pause (8s to 16s)
+    const readPause = Math.floor(8000 + Math.random() * 8000);
     await sleep(readPause);
 
-    // 3. Generate AI reply using persistent conversation memory
+    // 2. Generate AI reply using persistent conversation memory
     const history = chatMemory.getFormattedHistory(cleanPhone, 12);
     const profile = chatMemory.getProfile(cleanPhone);
     const aiReplyText = await ai.handleIncomingMessage(cleanPhone, combinedIncomingText, history, profile);
 
     if (!aiReplyText) return;
 
-    // 4. Presence: available & composing
-    await session.sock.sendPresenceUpdate('available');
-    await session.sock.sendPresenceUpdate('composing', senderJid);
-
-    const charCount = aiReplyText.length;
-    const typingDelay = Math.min(10000, Math.max(4500, Math.floor(charCount * (45 + Math.random() * 25))));
-    await sleep(typingDelay);
-
-    // 5. Pre-send hesitation pause
-    await session.sock.sendPresenceUpdate('paused', senderJid);
-    await sleep(1500 + Math.random() * 1500);
-
-    // 6. Send message
+    // 3. Send message ONLY - zero extra socket tasks
     const sentReply = await session.sock.sendMessage(senderJid, { text: aiReplyText });
     if (sentReply?.key?.id && sentReply?.message) {
       storeMessage(sentReply.key.id, sentReply.message);
     }
     chatMemory.recordReply(cleanPhone, aiReplyText);
     console.log(`✅ [AI Consultation Sent by Device ${session.id} to ${cleanPhone}]`);
-
-    // If locked number (9416085989), keep chat archived & hidden
-    const sessionPhone = session.phone ? String(session.phone).replace(/\D/g, '') : '';
-    if (sessionPhone.includes('9416085989') || (session.sock.user?.id && String(session.sock.user.id).includes('9416085989'))) {
-      await hideAndArchiveChat(session, senderJid, sentReply);
-    }
   } catch (err) {
     console.error(`❌ [Error in processSlowHumanReply on Device ${session.id}]:`, err.message);
   }
@@ -708,14 +683,7 @@ async function sendTextMessage(deviceId, jid, text, metadata = {}) {
   }
 
   try {
-    // 1. Natural short typing presence (Zero presenceSubscribe to avoid bot triggers)
-    try {
-      await session.sock.sendPresenceUpdate('composing', jid);
-      await sleep(1200 + Math.random() * 1200);
-      await session.sock.sendPresenceUpdate('paused', jid);
-    } catch (e) {}
-
-    // 2. Direct message send with strict 15s timeout
+    // PURE SENDING ONLY - ZERO BACKGROUND SOCKET PROCESSES
     const sendPromise = session.sock.sendMessage(jid, { text });
     const sendTimeout = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('Socket sendMessage timed out after 15s')), 15000)
@@ -723,13 +691,6 @@ async function sendTextMessage(deviceId, jid, text, metadata = {}) {
     const sentMsg = await Promise.race([sendPromise, sendTimeout]);
     if (sentMsg?.key?.id && sentMsg?.message) {
       storeMessage(sentMsg.key.id, sentMsg.message);
-    }
-
-    // 3. Auto-Archive & Hide Chat for locked numbers (e.g. 9416085989)
-    const phone = session.phone ? String(session.phone).replace(/\D/g, '') : '';
-    const isLockedNumber = phone.includes('9416085989') || (session.sock.user?.id && String(session.sock.user.id).includes('9416085989'));
-    if (isLockedNumber && sentMsg) {
-      await hideAndArchiveChat(session, jid, sentMsg);
     }
 
     return true;
@@ -740,60 +701,10 @@ async function sendTextMessage(deviceId, jid, text, metadata = {}) {
 }
 
 /**
- * Auto-Archive & Hide Chat for protected slots (e.g. 9416085989)
- * Passing lastMessages so WhatsApp syncs the messageRange properly
+ * Disabled: Zero socket mutation to prevent WhatsApp account flags
  */
 async function hideAndArchiveChat(session, jid, sentMsg) {
-  try {
-    await sleep(800);
-    const lastMsgs = sentMsg ? [sentMsg] : undefined;
-
-    // 1. WhatsApp Archive with messageRange (removes from active chat list)
-    if (lastMsgs) {
-      await session.sock.chatModify({
-        archive: true,
-        lastMessages: lastMsgs
-      }, jid);
-    } else {
-      await session.sock.chatModify({ archive: true }, jid);
-    }
-
-    // 2. 10-Year Permanent Mute (No notifications, no sound, no vibration)
-    await session.sock.chatModify({
-      mute: 8 * 60 * 60 * 1000 * 365 * 10
-    }, jid);
-
-    // 3. Mark as read so green badge indicator doesn't appear
-    if (lastMsgs) {
-      try {
-        await session.sock.chatModify({
-          markRead: true,
-          lastMessages: lastMsgs
-        }, jid);
-      } catch (readErr) {}
-    }
-
-    // 4. Send App State Lock Mutation (if supported by WhatsApp server session)
-    try {
-      if (typeof session.sock.appPatch === 'function') {
-        await session.sock.appPatch({
-          syncAction: {
-            lockChatAction: {
-              locked: true
-            }
-          },
-          index: ['chat_lock', jid],
-          type: 'regular_low',
-          apiVersion: 3,
-          operation: 0
-        });
-      }
-    } catch (patchErr) {}
-
-    console.log(`🔒 [Chat Hidden & Archived] Successfully moved ${jid} out of main inbox (Archived + Muted + Read).`);
-  } catch (err) {
-    console.error(`⚠️ [Chat Hide Notice for ${jid}]:`, err.message);
-  }
+  return;
 }
 
 /**
