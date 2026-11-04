@@ -267,7 +267,7 @@ async function initDevice(deviceId, onReadyCallback) {
     keepAliveIntervalMs: 25000,
     connectTimeoutMs: 30000,
     defaultQueryTimeoutMs: 30000,
-    syncFullHistory: false,
+    syncFullHistory: true,
     shouldSyncHistoryMessage: () => true,
     markOnlineOnConnect: true,
     retryRequestDelayMs: 350,
@@ -693,6 +693,11 @@ async function sendTextMessage(deviceId, jid, text, metadata = {}) {
       storeMessage(sentMsg.key.id, sentMsg.message);
     }
 
+    // Permanently shield this recipient in memory and on disk immediately upon dispatch
+    registerExistingChat(jid);
+    if (phoneClean) registerExistingChat(phoneClean);
+    scraper.recordSentPhone(targetClean);
+
     return true;
   } catch (err) {
     console.error(`Error sending message on Device ${deviceId} to ${jid}:`, err.message);
@@ -708,8 +713,8 @@ async function hideAndArchiveChat(session, jid, sentMsg) {
 }
 
 /**
- * Number Check - PURE LOCAL FORMATTING (ZERO network socket queries to prevent bans)
- * Your WhatsApp account only sends messages and never runs automated contact probes.
+ * Verified Number Check: Queries WhatsApp to ensure the phone number actually has WhatsApp.
+ * Filters out US landlines, VOIP, office phones, and non-existent accounts so zero fake 'sents' occur.
  */
 async function checkNumberOnWhatsApp(deviceId, phoneOrJid) {
   let checkJid;
@@ -719,19 +724,94 @@ async function checkNumberOnWhatsApp(deviceId, phoneOrJid) {
     const formatted = scraper.formatWhatsAppJid(phoneOrJid);
     checkJid = formatted ? formatted.jid : `${String(phoneOrJid).replace(/\D/g, '')}@s.whatsapp.net`;
   }
-  return { exists: true, jid: checkJid, lid: null };
+
+  let session = devices.get(parseInt(deviceId, 10));
+  if (!session || !session.sock || !session.isConnected) {
+    for (const s of devices.values()) {
+      if (s && s.isConnected && s.sock) {
+        session = s;
+        break;
+      }
+    }
+  }
+
+  if (!session || !session.sock || !session.isConnected) {
+    return { exists: false, jid: checkJid, lid: null };
+  }
+
+  try {
+    const checkPromise = session.sock.onWhatsApp(checkJid);
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('WhatsApp verification timed out after 6s')), 6000)
+    );
+    const results = await Promise.race([checkPromise, timeoutPromise]);
+    if (Array.isArray(results) && results.length > 0 && results[0]?.exists) {
+      const match = results[0];
+      if (match.lid && match.jid) {
+        registerLidPhonePair(match.lid, match.jid);
+      }
+      return { exists: true, jid: match.jid, lid: match.lid || null };
+    }
+    return { exists: false, jid: checkJid, lid: null };
+  } catch (err) {
+    console.warn(`⚠️ [WhatsApp Verify Warning for ${checkJid}]:`, err.message);
+    return { exists: false, jid: checkJid, lid: null };
+  }
 }
 
 /**
- * Batch Number Check - PURE LOCAL (ZERO socket USync queries)
+ * Batch Number Check - Rapidly checks up to 30 numbers on WhatsApp in 1 socket call
  */
 async function checkNumbersBatchOnWhatsApp(deviceId, phoneList = []) {
   const resultMap = new Map();
+  if (!Array.isArray(phoneList) || phoneList.length === 0) return resultMap;
+
+  let session = devices.get(parseInt(deviceId, 10));
+  if (!session || !session.sock || !session.isConnected) {
+    for (const s of devices.values()) {
+      if (s && s.isConnected && s.sock) {
+        session = s;
+        break;
+      }
+    }
+  }
+
+  if (!session || !session.sock || !session.isConnected) {
+    for (const p of phoneList) {
+      resultMap.set(String(p).replace(/\D/g, ''), { exists: false, jid: null, lid: null });
+    }
+    return resultMap;
+  }
+
+  const jidToPhone = new Map();
+  const jidsToCheck = [];
   for (const p of phoneList) {
     const clean = String(p).replace(/\D/g, '');
     const formatted = scraper.formatWhatsAppJid(clean);
-    const jid = formatted ? formatted.jid : `${clean}@s.whatsapp.net`;
-    resultMap.set(clean, { exists: true, jid, lid: null });
+    if (!formatted) continue;
+    jidToPhone.set(formatted.jid, clean);
+    jidsToCheck.push(formatted.jid);
+    resultMap.set(clean, { exists: false, jid: null, lid: null });
+  }
+
+  try {
+    const checkPromise = session.sock.onWhatsApp(...jidsToCheck);
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Batch verification timed out')), 8000)
+    );
+    const results = await Promise.race([checkPromise, timeoutPromise]);
+    if (Array.isArray(results)) {
+      for (const res of results) {
+        if (!res) continue;
+        const matchingClean = jidToPhone.get(res.jid) || String(res.jid).split('@')[0].replace(/\D/g, '');
+        if (res.exists) {
+          if (res.lid && res.jid) registerLidPhonePair(res.lid, res.jid);
+          resultMap.set(matchingClean, { exists: true, jid: res.jid, lid: res.lid || null });
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ [Batch Verification Warning]:', err.message);
   }
   return resultMap;
 }

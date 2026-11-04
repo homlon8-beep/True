@@ -436,8 +436,16 @@ async function runDeviceWorker(deviceId) {
       }
     }
 
-    // 8. Pure Direct Sending (Zero socket probes/tasks to prevent WhatsApp bans)
+    // 8. Verify recipient actually has WhatsApp (Filters out US landlines, VOIP, and non-mobile numbers)
     lead.jid = lead.jid || formatted.jid;
+    state.currentStatus = `Verifying WhatsApp account for +${lead.phone}...`;
+    const checkRes = await whatsapp.checkNumberOnWhatsApp(deviceId, lead.jid);
+    if (!checkRes || !checkRes.exists) {
+      console.log(`☎️ [Landline/Non-WhatsApp Filter Device ${deviceId}] +${lead.phone} is a landline or has NO WhatsApp account. Dropping safely!`);
+      scraper.updateLeadStatus(lead.phone, 'not_on_whatsapp', 'Number not registered on WhatsApp', deviceId);
+      continue;
+    }
+    lead.jid = checkRes.jid || lead.jid;
 
     // Double-check verified WhatsApp JID against all existing chats & memories
     const isAlreadyChatted = 

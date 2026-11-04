@@ -95,7 +95,24 @@ function isPhoneAlreadySent(phone) {
   if (!phone) return false;
   const history = loadSentHistory();
   const variations = getPhoneVariations(phone);
-  return variations.some(v => history.has(v));
+  if (variations.some(v => history.has(v))) return true;
+
+  // 100% Zero-Duplicate Shield: Also check leads database for past sent / contacted / replied status
+  const db = loadDatabase();
+  const foundLead = db.leads.find(l => {
+    if (!l || !l.phone) return false;
+    const lDigits = String(l.phone).replace(/\D/g, '');
+    return variations.some(v => v === lDigits || (l.jid && l.jid.includes(v)));
+  });
+
+  if (foundLead) {
+    const status = String(foundLead.status || '').toLowerCase();
+    if (status === 'sent' || status === 'already_contacted' || status === 'replied' || status === 'hot' || foundLead.lastSentAt) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function loadDatabase() {
@@ -439,9 +456,9 @@ function updateLeadStatus(phone, status, error = null, deviceId = null) {
   if (lead) {
     lead.status = status;
     if (deviceId) lead.handledByDevice = deviceId;
-    if (status === 'sent') {
-      lead.lastSentAt = new Date().toISOString();
-      db.sentCount = (db.sentCount || 0) + 1;
+    if (status === 'sent' || status === 'already_contacted') {
+      lead.lastSentAt = lead.lastSentAt || new Date().toISOString();
+      if (status === 'sent') db.sentCount = (db.sentCount || 0) + 1;
       recordSentPhone(cleanDigits);
     }
     if (error) lead.lastError = error;
