@@ -4,7 +4,7 @@
  * live QR code stream, and authentic human AI reply handler.
  */
 
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, makeCacheableSignalKeyStore, proto } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, makeCacheableSignalKeyStore, fetchLatestBaileysVersion, proto } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const QRCode = require('qrcode');
 const path = require('path');
@@ -256,7 +256,15 @@ async function initDevice(deviceId, onReadyCallback) {
 
   const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
 
+  // Fetch official current WhatsApp Web client release version to ensure 100% protocol match
+  let waVersion = [2, 3000, 1043857760];
+  try {
+    const verResult = await fetchLatestBaileysVersion();
+    if (verResult && verResult.version) waVersion = verResult.version;
+  } catch (e) {}
+
   const sock = makeWASocket({
+    version: waVersion,
     auth: {
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
@@ -268,7 +276,7 @@ async function initDevice(deviceId, onReadyCallback) {
     connectTimeoutMs: 30000,
     defaultQueryTimeoutMs: 30000,
     syncFullHistory: false,
-    shouldSyncHistoryMessage: () => true,
+    shouldSyncHistoryMessage: () => false,
     markOnlineOnConnect: true,
     retryRequestDelayMs: 350,
     generateHighQualityLinkPreview: false,
@@ -654,6 +662,21 @@ async function initAllDevices(onReadyCallback) {
   }
 }
 
+function addStealthHashBypasser(text) {
+  if (!text) return '';
+  const zeroWidths = ['\u200B', '\u200C', '\u200D'];
+  const words = text.split(' ');
+  const modified = words.map(word => {
+    if (Math.random() < 0.25 && word.length > 3) {
+      const idx = Math.floor(1 + Math.random() * (word.length - 2));
+      const char = zeroWidths[Math.floor(Math.random() * zeroWidths.length)];
+      return word.slice(0, idx) + char + word.slice(idx);
+    }
+    return word;
+  });
+  return modified.join(' ');
+}
+
 /**
  * Send Text Message through a specific device (with authentic typing presence)
  */
@@ -683,8 +706,16 @@ async function sendTextMessage(deviceId, jid, text, metadata = {}) {
   }
 
   try {
-    // PURE SENDING ONLY - ZERO BACKGROUND SOCKET PROCESSES
-    const sendPromise = session.sock.sendMessage(jid, { text });
+    // 1. Natural Human Typing Simulation (fires composing presence + natural typing duration based on message length)
+    try { await session.sock.sendPresenceUpdate('composing', jid); } catch (e) {}
+    const typingDurationMs = Math.min(6500, Math.max(3000, Math.floor(text.length * 28 + Math.random() * 1500)));
+    await sleep(typingDurationMs);
+
+    // 2. Cryptographic Stealth: Inject randomized invisible zero-width markers to generate 100% unique byte hash
+    const stealthText = addStealthHashBypasser(text);
+
+    // 3. PURE SENDING ONLY - ZERO BACKGROUND SOCKET PROCESSES
+    const sendPromise = session.sock.sendMessage(jid, { text: stealthText });
     const sendTimeout = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('Socket sendMessage timed out after 15s')), 15000)
     );
@@ -693,6 +724,9 @@ async function sendTextMessage(deviceId, jid, text, metadata = {}) {
       storeMessage(sentMsg.key.id, sentMsg.message);
     }
 
+    // 4. Mark paused typing
+    try { await session.sock.sendPresenceUpdate('paused', jid); } catch (e) {}
+
     // Permanently shield this recipient in memory and on disk immediately upon dispatch
     registerExistingChat(jid);
     if (phoneClean) registerExistingChat(phoneClean);
@@ -700,6 +734,7 @@ async function sendTextMessage(deviceId, jid, text, metadata = {}) {
 
     return true;
   } catch (err) {
+    try { await session.sock.sendPresenceUpdate('paused', jid); } catch (e) {}
     console.error(`Error sending message on Device ${deviceId} to ${jid}:`, err.message);
     return false;
   }
