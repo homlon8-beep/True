@@ -28,7 +28,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Anti-Sleep Keep-Alive State & Auto-Host Detection
-let detectedBaseUrl = (process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_URL || '').replace(/\/$/, '');
+let detectedBaseUrl = (process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_URL || 'https://webify-whatsapp-bot.onrender.com').replace(/\/$/, '');
 let keepAliveTimer = null;
 let lastPingStatus = 'Pending first ping';
 let lastPingTime = 'Never';
