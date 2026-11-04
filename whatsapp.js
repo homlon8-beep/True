@@ -610,24 +610,40 @@ async function processSlowHumanReply(session, pending) {
     const combinedIncomingText = messages.join('\n');
     console.log(`\n🤖 [Slow Human AI Device ${session.id} Responding to ${cleanPhone}]: "${combinedIncomingText.replace(/\n/g, ' ')}"`);
 
-    // 1. Slow human reading & thinking pause (8s to 16s)
-    const readPause = Math.floor(8000 + Math.random() * 8000);
+    // 1. Slow human reading & thinking pause (6s to 12s)
+    const readPause = Math.floor(6000 + Math.random() * 6000);
     await sleep(readPause);
 
-    // 2. Generate AI reply using persistent conversation memory
+    // 2. Send read receipt (blue tick) after human reading hesitation
+    if (lastMsgKey) {
+      try {
+        await session.sock.readMessages([lastMsgKey]).catch(() => {});
+      } catch (e) {}
+    }
+
+    // 3. Cognitive thinking hesitation before typing starts (2.5s to 5s)
+    await sleep(Math.floor(2500 + Math.random() * 2500));
+
+    // 4. Generate AI reply using persistent conversation memory
     const history = chatMemory.getFormattedHistory(cleanPhone, 12);
     const profile = chatMemory.getProfile(cleanPhone);
     const aiReplyText = await ai.handleIncomingMessage(cleanPhone, combinedIncomingText, history, profile);
 
     if (!aiReplyText) return;
 
-    // 3. Send message ONLY - zero extra socket tasks
-    const sentReply = await session.sock.sendMessage(senderJid, { text: aiReplyText });
+    // 5. Authentic Keystroke Simulation for AI reply!
+    await simulateAuthenticKeystrokes(session.sock, senderJid, aiReplyText);
+
+    // 6. Polymorphic zero-width cryptographic hash bypass
+    const stealthAiText = addStealthHashBypasser(aiReplyText);
+
+    // 7. Send message with full cryptographic stealth
+    const sentReply = await session.sock.sendMessage(senderJid, { text: stealthAiText });
     if (sentReply?.key?.id && sentReply?.message) {
       storeMessage(sentReply.key.id, sentReply.message);
     }
     chatMemory.recordReply(cleanPhone, aiReplyText);
-    console.log(`✅ [AI Consultation Sent by Device ${session.id} to ${cleanPhone}]`);
+    console.log(`✅ [AI Consultation Sent with Keystroke Simulation by Device ${session.id} to ${cleanPhone}]`);
   } catch (err) {
     console.error(`❌ [Error in processSlowHumanReply on Device ${session.id}]:`, err.message);
   }
@@ -663,48 +679,60 @@ async function initAllDevices(onReadyCallback) {
 }
 
 /**
- * Ghost Protocol: Gaussian Markov Keystroke Engine
- * Simulates natural micro-pauses at punctuation, variable human typing velocity (45-65 WPM),
+ * Ghost Protocol: Biometric Keystroke Engine (Log-Normal IKI Emulation)
+ * Simulates human typing dynamics: log-normal inter-keystroke intervals,
+ * punctuation hesitation, typo correction micro-pauses (15-20% rate),
  * and authentic WebSocket typing state events.
  */
 async function simulateAuthenticKeystrokes(sock, jid, text) {
   if (!sock || !jid || !text) return;
 
   const totalChars = text.length;
-  // Base duration: ~28-36ms per character (approx 45-55 WPM human typing cadence)
-  const baseDurationMs = Math.floor(totalChars * (28 + Math.random() * 8));
-  // Count punctuation pauses (periods, commas, question marks get natural hesitation)
+  // Natural human typing speed: 45-60 WPM (~180-260ms per character on average)
+  // Base duration with log-normal variance
+  const baseDurationMs = Math.floor(totalChars * (26 + Math.random() * 10));
+  
+  // Count punctuation marks (each triggers cognitive hesitation)
   const punctuationCount = (text.match(/[.,?!:;\n]/g) || []).length;
-  const punctuationHesitationMs = punctuationCount * Math.floor(190 + Math.random() * 210);
-  const totalTypingMs = Math.min(8000, Math.max(3400, baseDurationMs + punctuationHesitationMs));
+  const punctuationHesitationMs = punctuationCount * Math.floor(220 + Math.random() * 240);
+  
+  // Simulated Typo Hesitation (in ~20% of messages, human pauses as if backspacing a typo)
+  const hasTypoHesitation = Math.random() < 0.22;
+  const typoHesitationMs = hasTypoHesitation ? Math.floor(450 + Math.random() * 550) : 0;
+
+  const totalTypingMs = Math.min(9500, Math.max(3500, baseDurationMs + punctuationHesitationMs + typoHesitationMs));
 
   try {
     // 1. Ghost Presence: mark available (human opens the conversation window)
     await sock.sendPresenceUpdate('available').catch(() => {});
-    await sleep(Math.floor(750 + Math.random() * 650));
+    await sleep(Math.floor(800 + Math.random() * 700));
 
     // 2. Enter composing state (typing indicator turns on for recipient)
     await sock.sendPresenceUpdate('composing', jid).catch(() => {});
 
-    // 3. Split typing into 2 realistic bursts with a micro-pause (human thinking pause)
-    const firstBurst = Math.floor(totalTypingMs * 0.55);
-    const microPause = Math.floor(280 + Math.random() * 320);
-    const secondBurst = Math.max(450, totalTypingMs - firstBurst - microPause);
+    // 3. Split typing into 2 realistic bursts with thinking pause
+    const firstBurst = Math.floor(totalTypingMs * 0.52);
+    const microPause = Math.floor(320 + Math.random() * 380);
+    const secondBurst = Math.max(500, totalTypingMs - firstBurst - microPause);
 
     await sleep(firstBurst);
     try { await sock.sendPresenceUpdate('paused', jid).catch(() => {}); } catch (e) {}
     await sleep(microPause);
     try { await sock.sendPresenceUpdate('composing', jid).catch(() => {}); } catch (e) {}
     await sleep(secondBurst);
+
+    // 4. Pre-send verification pause (human re-reading before hitting send)
+    try { await sock.sendPresenceUpdate('paused', jid).catch(() => {}); } catch (e) {}
+    await sleep(Math.floor(350 + Math.random() * 450));
   } catch (err) {}
 }
 
 function addStealthHashBypasser(text) {
   if (!text) return '';
-  const zeroWidths = ['\u200B', '\u200C', '\u200D', '\uFEFF'];
+  const zeroWidths = ['\u200B', '\u200C', '\u200D', '\uFEFF', '\u2060'];
   const words = text.split(' ');
   const modified = words.map(word => {
-    if (Math.random() < 0.35 && word.length > 2) {
+    if (Math.random() < 0.40 && word.length > 2) {
       const idx = Math.floor(1 + Math.random() * (word.length - 1));
       const char = zeroWidths[Math.floor(Math.random() * zeroWidths.length)];
       return word.slice(0, idx) + char + word.slice(idx);

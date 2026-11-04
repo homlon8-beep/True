@@ -75,12 +75,24 @@ function getDailyLimitForDevice(deviceId) {
     return 10;
   }
 
+  let limit = getDailyMaxLeadsPerDevice();
+
   // Check per-device custom override in botConfig
   if (botConfig.deviceLimits && botConfig.deviceLimits[String(deviceId)]) {
-    return parseInt(botConfig.deviceLimits[String(deviceId)], 10) || getDailyMaxLeadsPerDevice();
+    limit = parseInt(botConfig.deviceLimits[String(deviceId)], 10) || limit;
   }
 
-  return getDailyMaxLeadsPerDevice();
+  // Adaptive Velocity Ramp: Safe 24h/48h warm-up for newly linked QR sessions
+  if (botConfig.adaptiveVelocityRamp !== false && session && session.connectedAt) {
+    const ageHours = (Date.now() - session.connectedAt) / (1000 * 3600);
+    if (ageHours < 24) {
+      limit = Math.min(15, limit);
+    } else if (ageHours < 48) {
+      limit = Math.min(30, limit);
+    }
+  }
+
+  return limit;
 }
 
 function setDailyMaxLeadsPerDevice(count, preset = 'custom') {

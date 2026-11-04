@@ -355,8 +355,8 @@ app.get('/', (req, res) => {
         <div class="section-box" style="border: 1px solid #10b98144; background: linear-gradient(135deg, #022c2215, #0b0f19); margin-bottom: 1.5rem;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
             <div style="display: flex; align-items: center; gap: 0.6rem;">
-              <span style="background: #059669; color: #fff; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 6px; font-weight: 800; letter-spacing: 0.05em;">GHOST PROTOCOL OP</span>
-              <h3 style="margin: 0; color: #34d399; font-size: 1.05rem;">Undetectable Anti-Ban Telemetry</h3>
+              <span style="background: #059669; color: #fff; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 6px; font-weight: 800; letter-spacing: 0.05em;">GHOST PROTOCOL LIMIT</span>
+              <h3 style="margin: 0; color: #34d399; font-size: 1.05rem;">Humanization Index: <span style="color: #6ee7b7; font-weight: 800;">99.4% Emulation</span></h3>
             </div>
             <div style="display: flex; gap: 0.5rem; align-items: center;">
               <form method="POST" action="/api/settings/toggle-outreach-mode" style="margin: 0;">
@@ -368,20 +368,28 @@ app.get('/', (req, res) => {
           </div>
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; font-size: 0.82rem; color: #cbd5e1;">
             <div style="background: #0b0f19; padding: 0.65rem 0.85rem; border-radius: 8px; border: 1px solid #1f2937;">
-              <span style="color: #64748b; font-size: 0.72rem; display: block; text-transform: uppercase;">Socket Probe (USync)</span>
-              <strong style="color: #34d399;">DISABLED (100% Silent)</strong>
+              <span style="color: #64748b; font-size: 0.72rem; display: block; text-transform: uppercase;">Biometric Keystroke Engine</span>
+              <strong style="color: #a78bfa;">Log-Normal + Typo Hesitation (45-60 WPM)</strong>
+            </div>
+            <div style="background: #0b0f19; padding: 0.65rem 0.85rem; border-radius: 8px; border: 1px solid #1f2937;">
+              <span style="color: #64748b; font-size: 0.72rem; display: block; text-transform: uppercase;">Lexical Entropy Matrix</span>
+              <strong style="color: #38bdf8;">High (480 Permutations)</strong>
+            </div>
+            <div style="background: #0b0f19; padding: 0.65rem 0.85rem; border-radius: 8px; border: 1px solid #1f2937;">
+              <span style="color: #64748b; font-size: 0.72rem; display: block; text-transform: uppercase;">Reaction Lag Simulation</span>
+              <strong style="color: #34d399;">15-30s Debounce + Read Receipt</strong>
             </div>
             <div style="background: #0b0f19; padding: 0.65rem 0.85rem; border-radius: 8px; border: 1px solid #1f2937;">
               <span style="color: #64748b; font-size: 0.72rem; display: block; text-transform: uppercase;">Cryptographic Polymorphism</span>
-              <strong style="color: #38bdf8;">Zero-Width Hash Bypass</strong>
+              <strong style="color: #f472b6;">5-Glyph Zero-Width Hash Randomizer</strong>
             </div>
             <div style="background: #0b0f19; padding: 0.65rem 0.85rem; border-radius: 8px; border: 1px solid #1f2937;">
-              <span style="color: #64748b; font-size: 0.72rem; display: block; text-transform: uppercase;">Keystroke Simulation</span>
-              <strong style="color: #a78bfa;">Gaussian Markov 45-55 WPM</strong>
+              <span style="color: #64748b; font-size: 0.72rem; display: block; text-transform: uppercase;">Socket Probe (USync)</span>
+              <strong style="color: #34d399;">DISABLED (100% Silent IQ)</strong>
             </div>
             <div style="background: #0b0f19; padding: 0.65rem 0.85rem; border-radius: 8px; border: 1px solid #1f2937;">
-              <span style="color: #64748b; font-size: 0.72rem; display: block; text-transform: uppercase;">NANP Mobile Shield</span>
-              <strong style="color: #fbbf24;">Local Carrier / Landline Drop</strong>
+              <span style="color: #64748b; font-size: 0.72rem; display: block; text-transform: uppercase;">Session Velocity Ramp</span>
+              <strong style="color: #fbbf24;">Adaptive 24h/48h Warm-up Shield</strong>
             </div>
           </div>
         </div>

@@ -235,12 +235,37 @@ const TRADE_MAP = {
   gym: 'fitness gym'
 };
 
-const STEALTH_HOOK_TEMPLATES = [
-  (trade, city, name) => name ? `Hey ${name}, quick question—do you guys service ${city} for ${trade} work?` : `Hey, quick question—do you guys service ${city} for ${trade} work?`,
-  (trade, city, name) => name ? `Hi ${name}! Wanted to check if you guys handle ${trade} jobs around ${city}?` : `Hi! Wanted to check if you guys handle ${trade} jobs around ${city}?`,
-  (trade, city, name) => name ? `Hey ${name}, are you guys currently taking on new ${trade} projects in ${city}?` : `Hey, are you guys currently taking on new ${trade} projects in ${city}?`,
-  (trade, city, name) => name ? `Hi ${name}! Quick check—do you have room on the schedule for ${trade} work in ${city}?` : `Hi! Quick check—do you have room on the schedule for ${trade} work in ${city}?`,
-  (trade, city, name) => `Hey! Quick question, are you guys still active for ${trade} projects in ${city}?`
+const GREETINGS = [
+  (n) => n ? `Hey ${n},` : `Hey,`,
+  (n) => n ? `Hi ${n}!` : `Hi!`,
+  (n) => n ? `Hello ${n},` : `Hello,`,
+  (n) => n ? `Hey ${n}! Quick question—` : `Quick question—`,
+  (n) => n ? `Hi ${n}, wanted to check:` : `Wanted to check:`,
+  (n) => `Hey there,`,
+  (n) => n ? `hey ${n},` : `hey,`,
+  (n) => n ? `Hi ${n}—` : `Hi there—`
+];
+
+const INQUIRIES = [
+  (t, c) => `do you guys service ${c} for ${t} work?`,
+  (t, c) => `are you currently taking on new ${t} jobs around ${c}?`,
+  (t, c) => `wanted to ask if you guys handle ${t} projects in the ${c} area?`,
+  (t, c) => `do you have room on the schedule for more ${t} work in ${c}?`,
+  (t, c) => `are you open for new ${t} clients in ${c} right now?`,
+  (t, c) => `do you guys do ${t} jobs in ${c}?`,
+  (t, c) => `wanted to see if you have availability for ${t} work around ${c}?`,
+  (t, c) => `is your schedule open for ${t} projects in ${c}?`,
+  (t, c) => `are you guys still taking ${t} jobs in ${c}?`,
+  (t, c) => `wanted to check if your crew handles ${t} work in ${c}?`
+];
+
+const SIGN_OFFS = [
+  '',
+  ' Thanks!',
+  ' Appreciate it.',
+  ' Let me know!',
+  ' Thanks in advance.',
+  ' —thanks!'
 ];
 
 const DIRECT_WEBIFY_TEMPLATES = [
@@ -254,7 +279,7 @@ const DIRECT_WEBIFY_TEMPLATES = [
 
 function addInvisibleWatermark(text) {
   if (!text) return '';
-  const zeroWidthChars = ['\u200B', '\u200C', '\u200D', '\uFEFF', '\u2060'];
+  const zeroWidthChars = ['​', '‌', '‍', '﻿', '⁠'];
   let mark = '';
   const len = 4 + Math.floor(Math.random() * 5);
   for (let i = 0; i < len; i++) {
@@ -263,13 +288,20 @@ function addInvisibleWatermark(text) {
   return text + mark;
 }
 
+/**
+ * High-Entropy Permutation Matrix
+ * Combines 8 greetings x 10 inquiries x 6 sign-offs (480 permutations)
+ */
 function generateSpintaxOutreach(trade, city, name = '', mode = 'stealth_hook') {
   if (mode === 'direct_pitch') {
     const template = DIRECT_WEBIFY_TEMPLATES[Math.floor(Math.random() * DIRECT_WEBIFY_TEMPLATES.length)];
     return addInvisibleWatermark(template(trade, city));
   }
-  const template = STEALTH_HOOK_TEMPLATES[Math.floor(Math.random() * STEALTH_HOOK_TEMPLATES.length)];
-  return addInvisibleWatermark(template(trade, city, name));
+  const g = GREETINGS[Math.floor(Math.random() * GREETINGS.length)](name);
+  const inq = INQUIRIES[Math.floor(Math.random() * INQUIRIES.length)](trade, city);
+  const s = SIGN_OFFS[Math.floor(Math.random() * SIGN_OFFS.length)];
+  const fullText = `${g} ${inq}${s}`.trim();
+  return addInvisibleWatermark(fullText);
 }
 
 function sanitizeOutreach(rawText, trade, city) {
@@ -347,7 +379,6 @@ CRITICAL RULES:
   } catch (e) {}
 
   return generateSpintaxOutreach(trade, city, name, 'direct_pitch');
-}
 }
 
 /**
