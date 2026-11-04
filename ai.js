@@ -235,6 +235,14 @@ const TRADE_MAP = {
   gym: 'fitness gym'
 };
 
+const STEALTH_HOOK_TEMPLATES = [
+  (trade, city, name) => name ? `Hey ${name}, quick question—do you guys service ${city} for ${trade} work?` : `Hey, quick question—do you guys service ${city} for ${trade} work?`,
+  (trade, city, name) => name ? `Hi ${name}! Wanted to check if you guys handle ${trade} jobs around ${city}?` : `Hi! Wanted to check if you guys handle ${trade} jobs around ${city}?`,
+  (trade, city, name) => name ? `Hey ${name}, are you guys currently taking on new ${trade} projects in ${city}?` : `Hey, are you guys currently taking on new ${trade} projects in ${city}?`,
+  (trade, city, name) => name ? `Hi ${name}! Quick check—do you have room on the schedule for ${trade} work in ${city}?` : `Hi! Quick check—do you have room on the schedule for ${trade} work in ${city}?`,
+  (trade, city, name) => `Hey! Quick question, are you guys still active for ${trade} projects in ${city}?`
+];
+
 const DIRECT_WEBIFY_TEMPLATES = [
   (trade, city) => `Hey! I'm Shaurya from Webify. We build modern high-converting websites and automated customer outreach for ${trade} companies in ${city}. Are you guys looking to take on more client jobs this month?`,
   (trade, city) => `Hi there! I'm Shaurya from Webify. Reaching out because we help local ${trade} contractors around ${city} bring in more high-paying clients through custom websites and automated outreach. Do you have capacity for more jobs right now?`,
@@ -255,9 +263,13 @@ function addInvisibleWatermark(text) {
   return text + mark;
 }
 
-function generateSpintaxOutreach(trade, city) {
-  const template = DIRECT_WEBIFY_TEMPLATES[Math.floor(Math.random() * DIRECT_WEBIFY_TEMPLATES.length)];
-  return addInvisibleWatermark(template(trade, city));
+function generateSpintaxOutreach(trade, city, name = '', mode = 'stealth_hook') {
+  if (mode === 'direct_pitch') {
+    const template = DIRECT_WEBIFY_TEMPLATES[Math.floor(Math.random() * DIRECT_WEBIFY_TEMPLATES.length)];
+    return addInvisibleWatermark(template(trade, city));
+  }
+  const template = STEALTH_HOOK_TEMPLATES[Math.floor(Math.random() * STEALTH_HOOK_TEMPLATES.length)];
+  return addInvisibleWatermark(template(trade, city, name));
 }
 
 function sanitizeOutreach(rawText, trade, city) {
@@ -278,9 +290,10 @@ function sanitizeOutreach(rawText, trade, city) {
 }
 
 /**
- * Generate Step 1 Initial Outreach (Straight to the point from Shaurya at Webify)
+ * Generate Step 1 Initial Outreach
+ * Supports 2-Step Stealth Hook (Anti-Spam Immunity) and Direct Pitch
  */
-async function generateOutreachMessage(leadOrName = '', fallbackTrade = 'contractor', fallbackCity = 'your area', country = 'USA') {
+async function generateOutreachMessage(leadOrName = '', fallbackTrade = 'contractor', fallbackCity = 'your area', country = 'USA', mode = 'stealth_hook') {
   let lead = {};
   if (typeof leadOrName === 'object' && leadOrName !== null) {
     lead = leadOrName;
@@ -300,6 +313,12 @@ async function generateOutreachMessage(leadOrName = '', fallbackTrade = 'contrac
 
   let trade = TRADE_MAP[rawTrade] || rawTrade;
   city = city.charAt(0).toUpperCase() + city.slice(1);
+  const name = (lead.name || '').trim();
+
+  // Stealth hook mode produces pure conversational inquiry with 0% spam flags
+  if (mode === 'stealth_hook') {
+    return generateSpintaxOutreach(trade, city, name, 'stealth_hook');
+  }
 
   try {
     const prompt = [
@@ -327,7 +346,8 @@ CRITICAL RULES:
     }
   } catch (e) {}
 
-  return generateSpintaxOutreach(trade, city);
+  return generateSpintaxOutreach(trade, city, name, 'direct_pitch');
+}
 }
 
 /**

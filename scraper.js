@@ -168,7 +168,7 @@ function saveDatabase(db) {
   }
 }
 
-const TOLL_FREE_PREFIXES = new Set(['800', '888', '877', '866', '855', '844', '833']);
+const TOLL_FREE_PREFIXES = new Set(['800', '888', '877', '866', '855', '844', '833', '822']);
 function isTollFree(cleanNumber) {
   const digits = String(cleanNumber).replace(/\D/g, '');
   const areaCode = digits.startsWith('1') ? digits.slice(1, 4) : digits.slice(0, 3);
@@ -176,7 +176,42 @@ function isTollFree(cleanNumber) {
 }
 
 /**
+ * Validate North American Numbering Plan (NANP) structure locally
+ * Drops toll-free, service codes (x11), invalid exchanges, and fictional numbers
+ */
+function isValidNanpNumber(digits10) {
+  if (!/^[2-9]\d{2}[2-9]\d{6}$/.test(digits10)) return false;
+  
+  const areaCode = digits10.slice(0, 3);
+  const exchange = digits10.slice(3, 6);
+  const line = digits10.slice(6, 10);
+
+  // Toll-free
+  if (TOLL_FREE_PREFIXES.has(areaCode)) return false;
+
+  // Service codes (211, 311, 411, 911, etc.)
+  if (areaCode.endsWith('11')) return false;
+
+  // Reserved codes (middle digit 9)
+  if (areaCode[1] === '9') return false;
+
+  // Exchange cannot end in 11 (e.g., 211, 411)
+  if (exchange.endsWith('11')) return false;
+
+  // Fictional 555-0100 to 555-0199
+  if (exchange === '555' && parseInt(line, 10) >= 100 && parseInt(line, 10) <= 199) return false;
+
+  // Repeated or dummy numbers
+  if (/^(\d)\1{6,}$/.test(digits10)) return false;
+  if (line === '0000' || line === '1111' || line === '1234') return false;
+
+  return true;
+}
+
+/**
  * Clean & Format International Phone Numbers into Baileys JID
+ * Enforces strictly mobile-only routing for UK (447) and Australia (614)
+ * and strict NANP validation for US/Canada to prevent invalid/landline bounces.
  */
 function formatWhatsAppJid(rawNumber) {
   if (!rawNumber) return null;
@@ -190,25 +225,43 @@ function formatWhatsAppJid(rawNumber) {
 
   let country = 'GLOBAL';
 
-  if (rawStr.startsWith('+1') || (digits.startsWith('1') && digits.length === 11)) {
-    digits = digits.startsWith('1') ? digits : '1' + digits;
-    country = 'USA';
-  } else if (rawStr.startsWith('+44') || (digits.startsWith('44') && (digits.length === 12 || digits.length === 11))) {
-    digits = digits.startsWith('44') ? digits : '44' + digits;
-    country = 'UK';
-  } else if (digits.startsWith('07') && digits.length === 11) {
+  // 1. UK Numbers: Strictly 07... (mobile) -> 447...
+  if (digits.startsWith('07') && digits.length === 11) {
     digits = '44' + digits.slice(1);
     country = 'UK';
-  } else if (rawStr.startsWith('+61') || (digits.startsWith('61') && digits.length === 11)) {
-    digits = digits.startsWith('61') ? digits : '61' + digits;
-    country = 'Australia';
-  } else if (digits.startsWith('04') && digits.length === 10) {
+  } else if ((rawStr.startsWith('+44') || digits.startsWith('44')) && (digits.length === 12 || digits.length === 11)) {
+    const fullUk = digits.startsWith('44') ? digits : '44' + digits;
+    // UK WhatsApp accounts are exclusively on mobile (447...)
+    if (!fullUk.startsWith('447')) {
+      return null; // Landline or non-mobile dropped
+    }
+    digits = fullUk;
+    country = 'UK';
+  } 
+  // 2. Australia Numbers: Strictly 04... (mobile) -> 614...
+  else if (digits.startsWith('04') && digits.length === 10) {
     digits = '61' + digits.slice(1);
     country = 'Australia';
-  } else if (digits.length === 10) {
-    // US / Canada NANP Standard (Area code 2-9, exchange 2-9)
-    if (/^[2-9]\d{2}[2-9]\d{6}$/.test(digits)) {
+  } else if ((rawStr.startsWith('+61') || digits.startsWith('61')) && digits.length === 11) {
+    const fullAu = digits.startsWith('61') ? digits : '61' + digits;
+    // Australia WhatsApp accounts are mobile (614...)
+    if (!fullAu.startsWith('614')) {
+      return null; // State landline (02, 03, 07, 08) dropped
+    }
+    digits = fullAu;
+    country = 'Australia';
+  } 
+  // 3. USA / Canada Numbers: Strict NANP 10-digit mobile/standard validation
+  else if (digits.length === 10) {
+    if (isValidNanpNumber(digits)) {
       digits = '1' + digits;
+      country = 'USA';
+    } else {
+      return null;
+    }
+  } else if (digits.length === 11 && digits.startsWith('1')) {
+    const core10 = digits.slice(1);
+    if (isValidNanpNumber(core10)) {
       country = 'USA';
     } else {
       return null;
@@ -216,8 +269,6 @@ function formatWhatsAppJid(rawNumber) {
   } else {
     return null;
   }
-
-  if (isTollFree(digits)) return null;
 
   return {
     cleanNumber: digits,

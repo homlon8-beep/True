@@ -34,6 +34,7 @@ function loadBotConfig() {
     specialDeviceNumber: '9416085989',
     specialDailyLimit: 10,
     vaultCode: '3369',
+    outreachMode: 'stealth_hook', // 'stealth_hook' (2-step anti-spam) or 'direct_pitch'
     pacingPreset: 'extreme_human' // 'extreme_human', 'fast', 'turbo', 'balanced', 'ultra_safe'
   };
 
@@ -144,7 +145,8 @@ function updatePacingConfig(updates = {}) {
     'maxBatchSize',
     'businessHoursShield',
     'dailyMaxLeadsPerDevice',
-    'pacingPreset'
+    'pacingPreset',
+    'outreachMode'
   ];
 
   const filtered = {};
@@ -454,7 +456,8 @@ async function runDeviceWorker(deviceId) {
 
     // 9. Generate Two-Step Undetectable Outreach Message
     state.currentStatus = `Preparing personalized outreach for +${lead.phone}...`;
-    const outreachText = await ai.generateOutreachMessage(lead);
+    const outreachMode = botConfig.outreachMode || 'stealth_hook';
+    const outreachText = await ai.generateOutreachMessage(lead, lead.trade || lead.niche, lead.city, lead.country, outreachMode);
 
     // 10. Send via WhatsApp through this device (ONLY SENDING, ZERO BACKGROUND PROBES)
     state.currentStatus = `Sending outreach to +${lead.phone}...`;
