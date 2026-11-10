@@ -1,15 +1,12 @@
 {
   "dailyMaxLeadsPerDevice": 50,
-  "minMsgDelayMs": 45000,
-  "maxMsgDelayMs": 90000,
-  "minBreakMins": 14,
-  "maxBreakMins": 26,
-  "minBatchSize": 1,
-  "maxBatchSize": 3,
+  "minMsgDelayMs": 25000,
+  "maxMsgDelayMs": 45000,
+  "minBreakMins": 2,
+  "maxBreakMins": 4,
+  "minBatchSize": 6,
+  "maxBatchSize": 12,
   "businessHoursShield": false,
   "adaptiveVelocityRamp": false,
-  "specialDeviceNumber": "9416085989",
-  "specialDailyLimit": 10,
-  "vaultCode": "3369",
-  "pacingPreset": "extreme_human"
+  "pacingPreset": "fast"
 }

@@ -507,9 +507,6 @@ app.get('/', (req, res) => {
                 <span style="color: #34d399; font-weight: 700;">${(state.dailyMaxPerDevice || 50) * Math.max(1, state.connectedDevicesCount)} msgs/day</span> across active devices 
                 (Up to <span style="color: #818cf8; font-weight: 700;">${(state.dailyMaxPerDevice || 50) * state.maxDevices} msgs/day</span> with all 6 devices linked).
               </div>
-              <div style="margin-top: 0.4rem; color: #c4b5fd; font-size: 0.78rem;">
-                🔒 <strong>Device Rule:</strong> Number <strong>+91-9416085989</strong> is strictly locked to <strong>10 messages/day</strong> and all sent chats are automatically archived &amp; muted (Secret Vault Code: <strong>3369</strong>). All other numbers send your custom volume (${state.dailyMaxPerDevice || 50}/day).
-              </div>
             </div>
           </form>
         </div>
@@ -521,7 +518,12 @@ app.get('/', (req, res) => {
               <h3 style="margin: 0; color: #818cf8;">📱 Multi-Device Control Center (${state.connectedDevicesCount} of ${state.maxDevices} Linked)</h3>
               <p style="color: #94a3b8; font-size: 0.85rem; margin-top: 0.2rem;">Live countdown timers below. Intelligent delivery cadence &amp; natural conversational rhythm. Atomic claiming prevents duplicate contacts.</p>
             </div>
-            <a href="/qr" class="btn btn-primary" style="font-size: 0.85rem;">+ Link / Manage Devices</a>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <form method="POST" action="/api/queue/wake" style="margin: 0;">
+                <button type="submit" class="btn btn-green" style="font-size: 0.85rem; padding: 0.55rem 1rem;">⚡ Dispatch Now / Skip Break</button>
+              </form>
+              <a href="/qr" class="btn btn-primary" style="font-size: 0.85rem;">+ Link / Manage Devices</a>
+            </div>
           </div>
 
           <div>
@@ -890,7 +892,16 @@ app.post('/api/queue/pause', (req, res) => {
 
 app.post('/api/queue/resume', (req, res) => {
   queue.resumeQueue();
+  queue.wakeAllWorkers();
   res.redirect('/?resumed=true');
+});
+
+app.post('/api/queue/wake', (req, res) => {
+  queue.wakeAllWorkers();
+  if (req.headers.accept && req.headers.accept.includes('application/json')) {
+    return res.json({ success: true, message: 'All workers awakened' });
+  }
+  res.redirect('/?woke=true');
 });
 
 app.post('/api/scraper/pause', (req, res) => {

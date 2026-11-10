@@ -59,6 +59,7 @@ function saveBotConfig(updates) {
   } catch (err) {
     console.error('Failed to save bot_config.json:', err.message);
   }
+  wakeAllWorkers();
   return botConfig;
 }
 
@@ -70,9 +71,9 @@ function getDailyLimitForDevice(deviceId) {
   const session = whatsapp.getDevice(deviceId);
   const phone = session && session.phone ? String(session.phone).replace(/\D/g, '') : '';
 
-  // Special Rule: 9416085989 is STRICTLY capped at 10 msgs/day!
-  if (phone.includes('9416085989') || (session && session.sock?.user?.id && String(session.sock.user.id).includes('9416085989'))) {
-    return 10;
+  // Optional special lock only if user explicitly turned on lockSpecialDevice
+  if (botConfig.lockSpecialDevice && (phone.includes('9416085989') || (session && session.sock?.user?.id && String(session.sock.user.id).includes('9416085989')))) {
+    return botConfig.specialDailyLimit || 10;
   }
 
   let limit = getDailyMaxLeadsPerDevice();
@@ -336,8 +337,28 @@ function getOrCreateDeviceState(deviceId) {
   return state;
 }
 
+const sleepInterrupts = new Set();
 async function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise(resolve => {
+    let timer = null;
+    const onInterrupt = () => {
+      if (timer) clearTimeout(timer);
+      sleepInterrupts.delete(onInterrupt);
+      resolve(true);
+    };
+    sleepInterrupts.add(onInterrupt);
+    timer = setTimeout(() => {
+      sleepInterrupts.delete(onInterrupt);
+      resolve(false);
+    }, ms);
+  });
+}
+
+function wakeAllWorkers() {
+  for (const interrupt of sleepInterrupts) {
+    try { interrupt(); } catch (e) {}
+  }
+  sleepInterrupts.clear();
 }
 
 /**
@@ -634,6 +655,7 @@ module.exports = {
   startQueueWorker,
   pauseQueue,
   resumeQueue,
+  wakeAllWorkers,
   getQueueState,
   getDailyMaxLeadsPerDevice,
   setDailyMaxLeadsPerDevice,
