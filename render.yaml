@@ -25,14 +25,14 @@ services:
       - key: DAILY_MAX_LEADS_PER_DEVICE
         value: 50
       - key: MIN_MSG_DELAY_MS
-        value: 60000
+        value: 25000
       - key: MAX_MSG_DELAY_MS
-        value: 120000
+        value: 45000
       - key: MIN_BREAK_MINS
-        value: 50
+        value: 2
       - key: MAX_BREAK_MINS
-        value: 80
+        value: 4
       - key: MIN_BATCH_SIZE
-        value: 5
+        value: 6
       - key: MAX_BATCH_SIZE
-        value: 8
+        value: 12
